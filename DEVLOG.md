@@ -110,3 +110,24 @@
 - Tests: planner (9 cases) — 47 total, typecheck clean.
 - Known unknowns to verify in game: does `DigBlock` rotate the bot (affects the 3×3 plane), how many
   block updates arrive after one break, real travel time between anarchies.
+
+## 2026-11-11 — miner fixes after first live run
+
+Live run (anarchy 202) exposed four real issues, all fixed:
+
+1. **No control lease** — SF rejects actions with `FAILED_PRECONDITION` unless the client owns a lease.
+   Runner now acquires a 120s lease, renews every 60s, releases in `finally` and on SIGINT/SIGTERM,
+   and retries every 5s for up to 90s when another client holds it.
+2. **Targets outside the mine** — `findBlocks(radius 40)` returned ore at y=107 / z=-18. Added cuboid
+   bounds (X 69..89, Z -9..11, Y 76..85), default radius 24.
+3. **`goTo` did not move the bot** — block goal with radius 1 is unreachable inside stone. Switched to
+   an XZ goal (radius 2, overworld), then poll `liveState` every 300ms and only dig when within reach;
+   otherwise log `could not reach target` and skip.
+4. **No rotation** — the SDK does expose `bot.look(yaw, pitch)` (BotService rotation RPC). Runner now
+   looks straight down (pitch 90) before each `digBlock`, so the bulldozer plane is horizontal.
+
+Remaining blocker for a live test: the SoulFire desktop/web client holds the lease while the bot is
+open there (`already_exists: Bot control is already leased`), so the controller cannot act. Close the
+client (or stop viewing the bot) before running the controller; in production the farm is headless.
+
+Diagnostics: `npx tsx scripts/probe-lease.ts` reports whether the lease is free.

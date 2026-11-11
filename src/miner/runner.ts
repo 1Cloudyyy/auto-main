@@ -30,8 +30,13 @@ export interface MinerConfig {
   readonly warpWaitMs: number;
   readonly oreIds: readonly string[];
   readonly weights: Readonly<Record<string, number>>;
+  /** Mine cuboid; anything outside is ignored. */
+  readonly minX?: number;
+  readonly maxX?: number;
   readonly minY?: number;
   readonly maxY?: number;
+  readonly minZ?: number;
+  readonly maxZ?: number;
 }
 
 export interface MinerResult {
@@ -54,17 +59,23 @@ export const DEFAULT_WEIGHTS: Readonly<Record<string, number>> = {
 };
 
 export const DEFAULT_MINER_CONFIG: Omit<MinerConfig, "warp"> = {
-  radius: 40,
+  radius: 24,
   maxDigs: 150,
   maxSeconds: 180,
   reach: 4.5,
   batchSize: 20,
   stepDelayMs: 120,
-  goToTimeoutMs: 12_000,
+  goToTimeoutMs: 8_000,
   anarchyWaitMs: 20_000,
   warpWaitMs: 12_000,
   oreIds: DEFAULT_ORE_IDS,
   weights: DEFAULT_WEIGHTS,
+  minX: 69,
+  maxX: 89,
+  minY: 76,
+  maxY: 85,
+  minZ: -9,
+  maxZ: 11,
 };
 
 /**
@@ -80,6 +91,24 @@ export async function runMiner(
   log: Logger,
 ): Promise<MinerResult> {
   const started = Date.now();
+
+  // Actions (chat commands, dig) require an exclusive control lease.
+  const lease = await acquireLease(bot, log);
+  const renewTimer = setInterval(() => {
+    void runEffect(lease.renew()).catch((error: unknown) => {
+      log.warn({ err: errorMessage(error) }, "control lease renew failed");
+    });
+  }, 60_000);
+
+  const onSignal = (): void => {
+    void runEffect(bot.stopPathfinding()).catch(() => undefined);
+    void runEffect(lease.release()).catch(() => undefined);
+    process.exit(130);
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+
+  try {
 
   if (config.anarchy !== undefined && config.anarchy.trim() !== "") {
     const command = normalizeAnarchy(config.anarchy);
@@ -129,8 +158,12 @@ export async function runMiner(
     const targets = planTargets(ores, state, config.weights, {
       window: 3,
       maxTargets: config.batchSize,
+      ...(config.minX === undefined ? {} : { minX: config.minX }),
+      ...(config.maxX === undefined ? {} : { maxX: config.maxX }),
       ...(config.minY === undefined ? {} : { minY: config.minY }),
       ...(config.maxY === undefined ? {} : { maxY: config.maxY }),
+      ...(config.minZ === undefined ? {} : { minZ: config.minZ }),
+      ...(config.maxZ === undefined ? {} : { maxZ: config.maxZ }),
     });
 
     if (targets.length === 0) {
@@ -146,11 +179,15 @@ export async function runMiner(
       }
 
       try {
-        const current = await runEffect(bot.liveState());
-        if (distance(current, target) > config.reach) {
-          await goTo(bot, target, config.goToTimeoutMs);
+        const inReach = await moveWithinReach(bot, target, config, log);
+        if (!inReach) {
+          log.debug({ at: [target.x, target.y, target.z] }, "target unreachable, skipped");
+          continue;
         }
 
+        // Bulldozer breaks a plane perpendicular to the view: look straight down
+        // so the 3x3 area is horizontal, on the target layer.
+        await runEffect(bot.look(0, 90));
         await runEffect(bot.digBlock({ position: positionOf(target) }));
         digs += 1;
         oreBlocks += target.ores;
@@ -182,15 +219,38 @@ export async function runMiner(
   log.info({ digs, scanned, oreBlocks, elapsedMs, stopped }, "mining session finished");
 
   return { digs, scanned, oreBlocks, elapsedMs, stopped };
+  } finally {
+    clearInterval(renewTimer);
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    await runEffect(lease.release()).catch(() => undefined);
+  }
 }
 
-async function goTo(bot: SoulFireBot, target: Vec3, timeoutMs: number): Promise<void> {
+async function moveWithinReach(
+  bot: SoulFireBot,
+  target: Vec3,
+  config: MinerConfig,
+  log: Logger,
+): Promise<boolean> {
+  const state = await runEffect(bot.liveState());
+  if (distance(state, target) <= config.reach) {
+    return true;
+  }
+
+  log.debug(
+    { from: [Math.round(state.x), Math.round(state.y), Math.round(state.z)], at: [target.x, target.y, target.z] },
+    "walking to target",
+  );
+
   const stream = bot.goTo({
     goal: {
       goal: {
-        case: "block",
+        case: "xz",
         value: {
-          position: positionOf(target),
+          x: target.x + 0.5,
+          z: target.z + 0.5,
+          dimension: "minecraft:overworld",
           radius: 2,
         },
       },
@@ -198,11 +258,41 @@ async function goTo(bot: SoulFireBot, target: Vec3, timeoutMs: number): Promise<
     options: {
       allowMining: false,
       allowPlacing: false,
-      timeoutSeconds: Math.max(1, Math.ceil(timeoutMs / 1000)),
+      timeoutSeconds: Math.max(1, Math.ceil(config.goToTimeoutMs / 1000)),
     },
   });
 
-  await withTimeout(runEffect(Stream.runDrain(stream)), timeoutMs, "goTo");
+  const drained = runEffect(Stream.runDrain(stream)).catch((error: unknown) => {
+    log.debug({ err: errorMessage(error) }, "pathfinding failed");
+  });
+
+  const deadline = Date.now() + config.goToTimeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(300);
+    const current = await runEffect(bot.liveState());
+    if (distance(current, target) <= config.reach) {
+      await runEffect(bot.stopPathfinding()).catch(() => undefined);
+      await drained;
+      log.debug(
+        { at: [Math.round(current.x), Math.round(current.y), Math.round(current.z)] },
+        "reached target",
+      );
+      return true;
+    }
+  }
+
+  await runEffect(bot.stopPathfinding()).catch(() => undefined);
+  await drained;
+  const final = await runEffect(bot.liveState());
+  log.warn(
+    {
+      at: [target.x, target.y, target.z],
+      stalledAt: [Math.round(final.x), Math.round(final.y), Math.round(final.z)],
+      distance: Math.round(distance(final, target) * 10) / 10,
+    },
+    "could not reach target",
+  );
+  return false;
 }
 
 function positionOf(target: Vec3): { x: number; y: number; z: number } {
@@ -219,21 +309,40 @@ export function normalizeAnarchy(value: string): string {
 
 const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 
+async function acquireLease(bot: SoulFireBot, log: Logger, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      return await runEffect(bot.acquireControl(120));
+    } catch (error) {
+      lastError = error;
+      log.warn(
+        { err: errorMessage(error) },
+        "control lease is busy (another client holds it), retrying in 5s",
+      );
+      await sleep(5_000);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("could not acquire the control lease");
+}
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms} ms`)), ms);
-    }),
-  ]);
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
+
+
+
+
+
+
 

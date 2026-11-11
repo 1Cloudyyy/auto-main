@@ -22,9 +22,13 @@ export interface PlanOptions {
   readonly window: number;
   /** Upper bound on returned targets. */
   readonly maxTargets: number;
-  /** Optional Y range filter (mine cuboid). */
+  /** Optional cuboid filter (mine bounds). */
+  readonly minX?: number;
+  readonly maxX?: number;
   readonly minY?: number;
   readonly maxY?: number;
+  readonly minZ?: number;
+  readonly maxZ?: number;
 }
 
 /**
@@ -45,8 +49,12 @@ export function planTargets(
   const radius = Math.floor(window / 2);
   const inRange = ores.filter(
     (ore) =>
+      (options.minX === undefined || ore.x >= options.minX) &&
+      (options.maxX === undefined || ore.x <= options.maxX) &&
       (options.minY === undefined || ore.y >= options.minY) &&
-      (options.maxY === undefined || ore.y <= options.maxY),
+      (options.maxY === undefined || ore.y <= options.maxY) &&
+      (options.minZ === undefined || ore.z >= options.minZ) &&
+      (options.maxZ === undefined || ore.z <= options.maxZ),
   );
 
   const remaining = new Map<string, OreBlock>();
@@ -171,4 +179,5 @@ function key(ore: Vec3): string {
 function positionKey(ore: Vec3): string {
   return `${ore.x},${ore.y},${ore.z}`;
 }
+
 
