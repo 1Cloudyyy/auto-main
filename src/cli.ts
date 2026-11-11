@@ -13,6 +13,8 @@ import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
+import { DEFAULT_MINER_CONFIG, runMiner } from "./miner/runner.js";
+import type { MinerConfig } from "./miner/runner.js";
 import {
   applyPluginSettings,
   resolveConfigWithSoulFire,
@@ -31,6 +33,21 @@ Usage:
   auto-main mines [--watch] [--json] [--limit N] [--offline]
                                    poll the mines API and print the chosen target
   auto-main record [options]       attach to a bot, run commands, dump ore snapshot
+  auto-main mine [options]         switch anarchy, warp and mine until a budget is hit
+
+mine options:
+  --anarchy 205                    anarchy number or full command
+  --warp mine                      warp command (default /warp mine)
+  --seconds 180                    time budget
+  --max-dig 150                    block budget
+  --radius 40                      findBlocks radius
+  --batch 20                       planned targets per scan
+  --reach 4.5                      dig without walking under this distance
+  --step-ms 120                    pause after each dig
+  --goto-ms 12000                  pathfinding deadline per target
+  --anarchy-wait-ms 20000          wait after the anarchy switch
+  --warp-wait-ms 12000             wait after the warp
+  --start                          start the bot if it is offline
 
 Settings come from the SoulFire plugin page (instance namespace "auto-main").
 Pass --offline to skip SoulFire and use env/config only.
@@ -69,6 +86,9 @@ function main(): void {
       return;
     case "record":
       void runRecord(config, log, flags);
+      return;
+    case "mine":
+      void runMine(config, log, flags);
       return;
     default:
       log.error({ command }, "unknown command");
@@ -301,6 +321,56 @@ async function runRecord(baseConfig: AppConfig, log: Logger, flags: Flags): Prom
         },
         "record done",
       );
+    }),
+  );
+
+  NodeRuntime.runMain(program);
+}
+
+async function runMine(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
+  const config =
+    flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
+  const anarchy = typeof flags["anarchy"] === "string" ? flags["anarchy"] : undefined;
+  const minerConfig: MinerConfig = {
+    ...DEFAULT_MINER_CONFIG,
+    warp: stringFlag(flags, "warp", "mine"),
+    ...(anarchy === undefined ? {} : { anarchy }),
+    radius: numberFlag(flags, "radius", DEFAULT_MINER_CONFIG.radius),
+    maxDigs: numberFlag(flags, "max-dig", DEFAULT_MINER_CONFIG.maxDigs),
+    maxSeconds: numberFlag(flags, "seconds", DEFAULT_MINER_CONFIG.maxSeconds),
+    batchSize: numberFlag(flags, "batch", DEFAULT_MINER_CONFIG.batchSize),
+    stepDelayMs: numberFlag(flags, "step-ms", DEFAULT_MINER_CONFIG.stepDelayMs),
+    reach: numberFlag(flags, "reach", DEFAULT_MINER_CONFIG.reach),
+    goToTimeoutMs: numberFlag(flags, "goto-ms", DEFAULT_MINER_CONFIG.goToTimeoutMs),
+    anarchyWaitMs: numberFlag(flags, "anarchy-wait-ms", DEFAULT_MINER_CONFIG.anarchyWaitMs),
+    warpWaitMs: numberFlag(flags, "warp-wait-ms", DEFAULT_MINER_CONFIG.warpWaitMs),
+  };
+
+  const program = Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* connectClient(config);
+      const instance = yield* resolveInstance(client, config.soulfire.instance);
+      const { bot, entry } = yield* resolveBot(instance, config.soulfire.bot);
+      const label = entry.accountName ?? entry.profileId;
+
+      if (!entry.isOnline) {
+        if (flags["start"] !== true) {
+          return yield* Effect.fail(
+            new Error(`Bot "${label}" is offline. Attach to a running bot or pass --start.`),
+          );
+        }
+        log.info({ bot: label }, "bot is offline, starting");
+        yield* bot.start();
+        yield* waitOnline(instance, entry.profileId, 120_000);
+      }
+
+      if (config.runtime.testMode) {
+        log.info("test mode: base trips are disabled");
+      }
+
+      log.info({ bot: label, ...minerConfig }, "mining started");
+      const result = yield* Effect.promise(() => runMiner(bot, minerConfig, log));
+      log.info({ bot: label, ...result }, "mining done");
     }),
   );
 

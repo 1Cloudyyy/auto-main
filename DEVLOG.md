@@ -96,3 +96,17 @@
   shulker packing can be tested without the base.
 - Plugin rebuilt and redeployed (`auto-main-plugin-0.1.0.jar`), app healthy, `test-mode` visible in
   `doctor`. 38 tests, typecheck clean.
+
+## 2026-11-11 — miner v0 (planner + runner + CLI)
+
+- `src/miner/planner.ts` — pure planning: candidates are ore positions, value = weighted ores inside
+  the bulldozer 3×3 window on the same Y layer, greedy by value, layers top-down, targets ordered by
+  value then distance. Y-range filter for the mine cuboid.
+- `src/miner/runner.ts` — live loop: `/anN` → `/warp mine` → `waitForChunks` → `findBlocks` →
+  plan batch → `goTo` (block goal, radius 2, deadline) → `digBlock` → repeat until `--seconds` or
+  `--max-dig`. Logs every dig at debug and a summary at info.
+- CLI: `auto-main mine --anarchy 205 --seconds 180 --max-dig 150` plus tuning flags
+  (`--radius`, `--batch`, `--reach`, `--step-ms`, `--goto-ms`, warp/anarchy waits, `--start`).
+- Tests: planner (9 cases) — 47 total, typecheck clean.
+- Known unknowns to verify in game: does `DigBlock` rotate the bot (affects the 3×3 plane), how many
+  block updates arrive after one break, real travel time between anarchies.

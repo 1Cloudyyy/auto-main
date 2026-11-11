@@ -38,6 +38,7 @@ npm test
 npm run dev -- doctor
 npm run dev -- mines --limit 15
 npm run dev -- mines --watch --json
+npm run dev -- mine --anarchy 205 --seconds 120 --max-dig 80
 npm run dev -- record --commands "/an205,/warp mine" --wait 20000 --out var/mine-205.jsonl
 ```
 

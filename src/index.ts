@@ -8,3 +8,5 @@ export * from "./soulfire/connect.js";
 export * from "./soulfire/recorder.js";
 export * from "./util/jsonl.js";
 export * from "./util/time.js";
+export * from "./miner/planner.js";
+export * from "./miner/runner.js";
