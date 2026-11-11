@@ -46,3 +46,13 @@
 - Exact main-anarchy command and base coordinates (spawn, hoppers, bottle chest).
 - Whether the server sends the 8 neighbour block updates in one packet after a bulldozer break.
 - Real `/anN` + chunk-load timing (affects `travelMs` in the dispatcher).
+
+## 2026-11-11 — база через `/clan home`
+
+- Подтверждено владельцем: кланы связывают анархии, `/clan home` телепортирует на базу
+  с **любой** анархии. Отдельная мейн-анархия в FSM не нужна.
+- FSM: `RETURN_MAIN` → `GO_HOME (/clan home)`; убрано исключение мейна из целей фарма.
+- Конфиг: добавлен `base.homeCommand` (env `BASE_HOME_COMMAND`, default `/clan home`) + 5 тестов.
+- Документы: `Концепция_v0.md` §4, §7, §8; `КОНСПЕКТ.md` §13.
+- Осталось выяснить: координаты воронок относительно точки `/clan home`, число воронок,
+  кулдаун `/clan home`.

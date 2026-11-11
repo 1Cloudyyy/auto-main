@@ -20,6 +20,10 @@ export const AppConfigSchema = z.object({
     serverTypes: z.string().min(1).default("all"),
     pollIntervalMs: z.number().int().positive().default(7000),
   }),
+  base: z.object({
+    /** Command that teleports the bot to the clan base from any anarchy. */
+    homeCommand: z.string().min(1).default("/clan home"),
+  }),
   targets: z.object({
     strategy: z.enum(["timer", "round_robin"]).default("timer"),
     travelMs: z.number().int().nonnegative().default(25_000),
@@ -85,6 +89,12 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
         apiUrl: env["MINES_API_URL"],
         serverTypes: env["MINES_SERVER_TYPES"],
         pollIntervalMs: toNumber(env["MINES_POLL_INTERVAL_MS"]),
+      }),
+    },
+    base: {
+      ...asRecord(fileConfig["base"]),
+      ...dropUndefined({
+        homeCommand: env["BASE_HOME_COMMAND"],
       }),
     },
     targets: {
