@@ -251,6 +251,11 @@ export async function runMiner(
         layerChanged = true;
         break;
       }
+
+      // Stay local: chasing targets across the pit drops the bot into holes.
+      if (distance(current, target) > config.reach + 2) {
+        continue;
+      }
       if (Date.now() >= deadline || digs >= config.maxDigs) {
         break;
       }
@@ -545,9 +550,20 @@ async function enterMine(bot: SoulFireBot, config: MinerConfig, log: Logger): Pr
   while (Date.now() < deadline) {
     const state = await runEffect(bot.liveState());
     const inside = state.x >= minX && state.x <= maxX && state.z >= minZ && state.z <= maxZ;
-    const nearOre = nearest !== undefined && distance(state, nearest) <= config.reach;
+    const onTopLayer = state.y >= (config.maxY ?? 85) - 1;
 
-    if (nearOre || (inside && nearest === undefined)) {
+    // Stop as soon as the bot stands on the mine surface: walking further
+    // drops it into the entry shaft/pocket at the edge.
+    if (state.y < (config.maxY ?? 85) - 3) {
+      await runEffect(bot.setMovement({ forward: false }));
+      log.warn(
+        { at: [Math.round(state.x), Math.round(state.y), Math.round(state.z)] },
+        "fell into the entry pocket; aborting the walk-in",
+      );
+      return false;
+    }
+
+    if (inside && onTopLayer) {
       await runEffect(bot.setMovement({ forward: false }));
       log.debug(
         { at: [Math.round(state.x), Math.round(state.y), Math.round(state.z)] },
@@ -600,6 +616,8 @@ const sleep = (ms: number): Promise<void> =>
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
+
 
 
 
