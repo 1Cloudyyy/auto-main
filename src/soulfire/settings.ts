@@ -64,17 +64,34 @@ export function protoValueToJs(value: unknown): unknown {
   }
 }
 
-/** Extracts the flat key/value map of one instance settings namespace. */
+/**
+ * Extracts the effective key/value map of one instance settings namespace.
+ *
+ * Values come from two places: defaults declared by the plugin
+ * (`settings_definitions[].type.value.def`) and values the user saved
+ * (`config.settings[].entries`). Saved values win.
+ */
 export function readSettingsNamespace(
-  info: Pick<InstanceInfo, "config">,
+  info: Pick<InstanceInfo, "config" | "settingsDefinitions">,
   namespace: string,
 ): Record<string, unknown> {
-  const settings = info.config?.settings ?? [];
-  const selected = settings.find((entry) => entry.namespace === namespace);
   const result: Record<string, unknown> = {};
-  for (const entry of selected?.entries ?? []) {
+
+  for (const definition of info.settingsDefinitions ?? []) {
+    if (definition.id?.namespace !== namespace) {
+      continue;
+    }
+    const setting = definition.type.value as { def?: unknown } | undefined;
+    if (setting?.def !== undefined) {
+      result[definition.id.key] = setting.def;
+    }
+  }
+
+  const stored = (info.config?.settings ?? []).find((entry) => entry.namespace === namespace);
+  for (const entry of stored?.entries ?? []) {
     result[entry.key] = protoValueToJs(entry.value);
   }
+
   return result;
 }
 

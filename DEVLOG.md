@@ -67,3 +67,20 @@
   главная анархия никогда не выбирается целью.
 - Тесты: +3 (всего 23), typecheck чистый.
 - Точку хома и членство в клане владелец настраивает вручную; продажа — тоже вручную.
+
+## 2026-11-11 — plugin settings page live
+
+- Added `plugin/` (Fabric mod, id `auto-main`, from the official template) that registers an
+  instance settings page `auto-main` with: mines API URL/filter/interval, home command/anarchy,
+  target strategy, travel/lead windows, rarity/allow/deny.
+- Build: `eclipse-temurin:25-jdk` + `./gradlew build` in Docker (host has no JDK).
+  Loom 1.15.4, compiled against `com.soulfiremc:mod:2.10.1` (latest published artifact);
+  runtime is SoulFire 2.10.7 — plugin loads cleanly.
+- Template fixes needed: `SoulFireAPI.registerServerExtension` no longer exists → `loadPlugin`;
+  `com.soulfiremc:shared` is not published past 2.9.x → removed.
+- Jar deployed to `/soulfire/data/minecraft/mods/auto-main-plugin-0.1.0.jar`, app restarted healthy.
+- Controller: `src/soulfire/settings.ts` merges plugin defaults (`settings_definitions[].type.value.def`)
+  with saved values (`config.settings[].entries`) and overlays them on env/yaml. `doctor` prints the
+  full effective map. 36 tests, typecheck clean.
+- Gotcha: `gradlew` from a Windows checkout has CRLF → build fails on Linux; added `.gitattributes`
+  (`eol=lf`, wrapper jar binary).

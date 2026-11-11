@@ -67,6 +67,34 @@ describe("readSettingsNamespace", () => {
   it("returns an empty map when the namespace is absent", () => {
     expect(readSettingsNamespace({ config: { settings: [] } } as never, SETTINGS_NAMESPACE)).toEqual({});
   });
+
+  it("merges plugin defaults with saved values (saved wins)", () => {
+    const info = {
+      settingsDefinitions: [
+        {
+          id: { namespace: SETTINGS_NAMESPACE, key: "home-anarchy" },
+          type: { case: "string", value: { def: "302" } },
+        },
+        {
+          id: { namespace: SETTINGS_NAMESPACE, key: "mines-poll-interval-ms" },
+          type: { case: "int", value: { def: 7000 } },
+        },
+      ],
+      config: {
+        settings: [
+          {
+            namespace: SETTINGS_NAMESPACE,
+            entries: [{ key: "mines-poll-interval-ms", value: proto("numberValue", 5000) }],
+          },
+        ],
+      },
+    };
+
+    expect(readSettingsNamespace(info as never, SETTINGS_NAMESPACE)).toEqual({
+      "home-anarchy": "302",
+      "mines-poll-interval-ms": 5000,
+    });
+  });
 });
 
 describe("applyPluginSettings", () => {
