@@ -1,0 +1,9 @@
+services:
+  controller:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./var:/app/var
+    command: ["node", "dist/src/cli.js", "help"]
