@@ -10,6 +10,7 @@ import { connectClient, resolveInstance } from "./connect.js";
 export const SETTINGS_NAMESPACE = "auto-main";
 
 const OverridesSchema = z.object({
+  "test-mode": z.boolean().optional(),
   "mines-api-url": z.url().optional(),
   "mines-server-types": z.string().min(1).optional(),
   "mines-poll-interval-ms": z.number().int().positive().optional(),
@@ -138,7 +139,10 @@ export function applyPluginSettings(baseConfig: AppConfig, values: Record<string
       allow: overrides["target-allow"] ?? baseConfig.targets.allow,
       deny: overrides["target-deny"] ?? baseConfig.targets.deny,
     },
-    runtime: baseConfig.runtime,
+    runtime: {
+      ...baseConfig.runtime,
+      testMode: overrides["test-mode"] ?? baseConfig.runtime.testMode,
+    },
   };
 
   const validated = AppConfigSchema.safeParse(merged);

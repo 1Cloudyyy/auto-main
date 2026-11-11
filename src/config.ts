@@ -41,6 +41,11 @@ export const AppConfigSchema = z.object({
   runtime: z.object({
     dataDir: z.string().min(1).default("var"),
     logLevel: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+    /**
+     * Skips base trips (drop, repair) and stops a run when inventory and
+     * shulkers are full. Used to validate the mining loop in isolation.
+     */
+    testMode: z.boolean().default(false),
   }),
 });
 
@@ -120,6 +125,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       ...dropUndefined({
         dataDir: env["DATA_DIR"],
         logLevel: env["LOG_LEVEL"],
+        testMode: toBoolean(env["TEST_MODE"]),
       }),
     },
   };
@@ -195,4 +201,18 @@ function toCsv(raw: string | undefined): string[] | undefined {
     .split(",")
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+}
+
+function toBoolean(raw: string | undefined): boolean | undefined {
+  if (raw === undefined || raw.trim() === "") {
+    return undefined;
+  }
+  const value = raw.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(value)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value)) {
+    return false;
+  }
+  throw new ConfigError(`Expected a boolean, got "${raw}"`);
 }

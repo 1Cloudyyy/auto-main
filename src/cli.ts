@@ -14,6 +14,7 @@ import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
 import {
+  applyPluginSettings,
   resolveConfigWithSoulFire,
   readSettingsNamespace,
   SETTINGS_NAMESPACE,
@@ -97,10 +98,15 @@ function runDoctor(config: AppConfig, log: Logger): void {
 
       const instance = yield* resolveInstance(client, config.soulfire.instance);
       const info = yield* instance.info();
+      const pluginSettings = readSettingsNamespace(info, SETTINGS_NAMESPACE);
+      const effective = applyPluginSettings(config, pluginSettings);
       log.info(
         {
           namespace: SETTINGS_NAMESPACE,
-          settings: readSettingsNamespace(info, SETTINGS_NAMESPACE),
+          testMode: effective.runtime.testMode,
+          homeAnarchy: effective.base.homeAnarchy ?? null,
+          strategy: effective.targets.strategy,
+          raw: pluginSettings,
         },
         "plugin settings",
       );

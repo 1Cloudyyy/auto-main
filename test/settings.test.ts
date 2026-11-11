@@ -121,6 +121,11 @@ describe("applyPluginSettings", () => {
     expect(merged.targets.travelMs).toBe(base.targets.travelMs);
   });
 
+  it("applies test mode from the plugin", () => {
+    expect(applyPluginSettings(base, { "test-mode": true }).runtime.testMode).toBe(true);
+    expect(applyPluginSettings(base, { "test-mode": false }).runtime.testMode).toBe(false);
+  });
+
   it("treats an empty home anarchy as unset", () => {
     const merged = applyPluginSettings({ ...base, base: { ...base.base, homeAnarchy: "302" } }, {
       "home-anarchy": "",

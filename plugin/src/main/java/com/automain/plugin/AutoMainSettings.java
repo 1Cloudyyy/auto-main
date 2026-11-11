@@ -33,6 +33,16 @@ public final class AutoMainSettings implements SettingsObject {
       .defaultValue(true)
       .build();
 
+  public static final BooleanProperty<SettingsSource.Instance> TEST_MODE =
+    ImmutableBooleanProperty.<SettingsSource.Instance>builder()
+      .sourceType(SettingsSource.Instance.INSTANCE)
+      .namespace(NAMESPACE)
+      .key("test-mode")
+      .uiName("Test mode")
+      .description("Skip base trips (drop, repair); stop when inventory and shulkers are full")
+      .defaultValue(false)
+      .build();
+
   public static final StringProperty<SettingsSource.Instance> MINES_API_URL =
     ImmutableStringProperty.<SettingsSource.Instance>builder()
       .sourceType(SettingsSource.Instance.INSTANCE)

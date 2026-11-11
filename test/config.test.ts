@@ -39,6 +39,13 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ env: {}, cwd })).toThrow(ConfigError);
   });
 
+  it("parses test mode", () => {
+    expect(loadConfig({ env: { SF_TOKEN: "t" }, cwd }).runtime.testMode).toBe(false);
+    expect(loadConfig({ env: { SF_TOKEN: "t", TEST_MODE: "true" }, cwd }).runtime.testMode).toBe(true);
+    expect(loadConfig({ env: { SF_TOKEN: "t", TEST_MODE: "0" }, cwd }).runtime.testMode).toBe(false);
+    expect(() => loadConfig({ env: { SF_TOKEN: "t", TEST_MODE: "maybe" }, cwd })).toThrow(ConfigError);
+  });
+
   it("rejects an inverted lead window", () => {
     expect(() =>
       loadConfig({

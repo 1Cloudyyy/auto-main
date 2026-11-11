@@ -84,3 +84,15 @@
   full effective map. 36 tests, typecheck clean.
 - Gotcha: `gradlew` from a Windows checkout has CRLF → build fails on Linux; added `.gitattributes`
   (`eol=lf`, wrapper jar binary).
+
+## 2026-11-11 — test mode
+
+- Plugin: new instance setting `test-mode` (checkbox "Test mode", default off) with description
+  "Skip base trips (drop, repair); stop when inventory and shulkers are full".
+- Controller: `runtime.testMode` (`TEST_MODE` env, plugin key `test-mode`), merged and validated;
+  `doctor` prints the effective value and raw plugin map.
+- Semantics for the upcoming modules: when on, `GO_MAIN`/`GO_HOME`/`DROP`/`REPAIR` are skipped and the
+  run ends when inventory + shulkers are full — so the chain API → `/anN` → `/warp mine` → mining →
+  shulker packing can be tested without the base.
+- Plugin rebuilt and redeployed (`auto-main-plugin-0.1.0.jar`), app healthy, `test-mode` visible in
+  `doctor`. 38 tests, typecheck clean.
