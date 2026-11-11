@@ -25,8 +25,18 @@ export function anarchyCommand(serverKey: string): string | null {
   return number === null ? null : `/an${number}`;
 }
 
+/**
+ * FunTime numbers anarchies in three-digit groups only:
+ * 1xx solo, 2xx duo, 3xx trio, 5xx five players, 9xx up to ten.
+ */
+export function isAnarchyGroupNumber(value: string): boolean {
+  return /^[12359]\d{2}$/.test(value.trim());
+}
+
 /** Numeric part of the server key (`311` for `anarchy311`). */
 export function serverNumber(serverKey: string): string | null {
   const match = /^anarchy(\d+)$/i.exec(serverKey);
   return match?.[1] ?? null;
 }
+
+

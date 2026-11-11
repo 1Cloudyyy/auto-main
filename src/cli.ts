@@ -40,6 +40,7 @@ mine options:
   --warp mine                      warp command (default /warp mine)
   --seconds 180                    time budget
   --max-dig 150                    block budget
+  --pickaxe-slot 1                 hotbar slot (1-9) with the pickaxe
   --radius 40                      findBlocks radius
   --batch 20                       planned targets per scan
   --reach 4.5                      dig without walking under this distance
@@ -55,6 +56,7 @@ Pass --offline to skip SoulFire and use env/config only.
 record options:
   --commands "/an205,/warp mine"   comma-separated commands (default: /warp mine)
   --wait 15000                     wait after each command, ms
+  --pickaxe-slot 1                 hotbar slot (1-9) with the pickaxe
   --radius 40                      findBlocks radius
   --max 2000                       findBlocks result cap
   --out var/record.jsonl           JSONL output file
@@ -335,6 +337,7 @@ async function runMine(baseConfig: AppConfig, log: Logger, flags: Flags): Promis
     ...DEFAULT_MINER_CONFIG,
     warp: stringFlag(flags, "warp", "mine"),
     ...(anarchy === undefined ? {} : { anarchy }),
+    pickaxeSlot: numberFlag(flags, "pickaxe-slot", DEFAULT_MINER_CONFIG.pickaxeSlot),
     radius: numberFlag(flags, "radius", DEFAULT_MINER_CONFIG.radius),
     maxDigs: numberFlag(flags, "max-dig", DEFAULT_MINER_CONFIG.maxDigs),
     maxSeconds: numberFlag(flags, "seconds", DEFAULT_MINER_CONFIG.maxSeconds),
@@ -451,3 +454,4 @@ function errorMessage(error: unknown): string {
 }
 
 main();
+

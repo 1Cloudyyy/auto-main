@@ -131,3 +131,27 @@ open there (`already_exists: Bot control is already leased`), so the controller 
 client (or stop viewing the bot) before running the controller; in production the farm is headless.
 
 Diagnostics: `npx tsx scripts/probe-lease.ts` reports whether the lease is free.
+
+## 2026-11-11 — navigation lessons from live runs
+
+Verified working: connect/lease → `/anN` → `/warp mine` → enter mine → `findBlocks` → `digBlock`
+(one run: 5 digs, 10 ore blocks). Everything below was added after real failures.
+
+- **Lease renew** defaulted to 30s (`renew()`), so the lease died mid-run. Now `renew(120)`.
+- **Dig timeout**: a blocked/protected block made `digBlock` hang ~60s. Now 8s deadline + `cancel`
+  + per-run blacklist.
+- **Pickaxe slot**: `pickaxe-slot` (1–9) in the plugin page; the bot selects it and verifies the item,
+  falling back to the first `*_pickaxe` in the hotbar with a warning. Live check found a
+  `stone_pickaxe` in slot 2 while slot 1 was configured.
+- **Anarchy numbering**: FunTime uses three-digit groups only (1xx solo, 2xx duo, 3xx trio, 5xx five,
+  9xx ten). `normalizeAnarchy` rejects anything else — an earlier `/an21` test silently stayed on the
+  previous server.
+- **Dimension**: the mine lives in `minecraft:lobby`, not overworld. `goTo` now uses
+  `liveState().dimension`; hardcoding overworld caused `Cross-dimension pathfinding is not supported`.
+- **Planning by layer**: the plan is capped at the bot's current Y, and re-planned when the bot falls
+  a layer; otherwise it kept requesting ore above it.
+- **Movement**: `goTo` (xz, radius 2, allowMining) first; if it fails, raw forward+jump walking.
+
+Known unsolved: in an already-dug mine the bot often ends up in a 1-block hole at the bottom and cannot
+climb or cross the 3x3 gaps; digs then time out. Next iteration: tunnel-toward-target (break the block
+in front of the desired direction instead of pathfinding), and test only on a freshly reset mine.

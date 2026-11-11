@@ -38,6 +38,10 @@ export const AppConfigSchema = z.object({
     allow: stringList.default([]),
     deny: stringList.default([]),
   }),
+  miner: z.object({
+    /** Hotbar slot (1-9) where the pickaxe lives. */
+    pickaxeSlot: z.number().int().min(1).max(9).default(1),
+  }),
   runtime: z.object({
     dataDir: z.string().min(1).default("var"),
     logLevel: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
@@ -118,6 +122,12 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
         rarity: toCsv(env["TARGET_RARITY"]),
         allow: toCsv(env["TARGET_ALLOW"]),
         deny: toCsv(env["TARGET_DENY"]),
+      }),
+    },
+    miner: {
+      ...asRecord(fileConfig["miner"]),
+      ...dropUndefined({
+        pickaxeSlot: toNumber(env["MINER_PICKAXE_SLOT"]),
       }),
     },
     runtime: {
@@ -216,3 +226,4 @@ function toBoolean(raw: string | undefined): boolean | undefined {
   }
   throw new ConfigError(`Expected a boolean, got "${raw}"`);
 }
+

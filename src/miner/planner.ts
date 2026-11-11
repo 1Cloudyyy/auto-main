@@ -142,9 +142,11 @@ function covers(center: Vec3, ore: OreBlock, radius: number): boolean {
 }
 
 function orderByValue(targets: readonly DigTarget[], from: Vec3): DigTarget[] {
+  // Nearest-first: the bot descends by digging and cannot cross the pit, so
+  // ordering by value first makes it chase unreachable clusters.
   return targets
     .map((target) => ({ ...target, distance: distance(from, target) }))
-    .sort((a, b) => b.value - a.value || a.distance - b.distance);
+    .sort((a, b) => a.distance - b.distance || b.value - a.value);
 }
 
 function dedupe(ores: readonly OreBlock[]): Vec3[] {
@@ -179,5 +181,6 @@ function key(ore: Vec3): string {
 function positionKey(ore: Vec3): string {
   return `${ore.x},${ore.y},${ore.z}`;
 }
+
 
 

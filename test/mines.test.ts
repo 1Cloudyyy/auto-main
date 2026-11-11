@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fetchMines, MinesApiError } from "../src/mines/client.js";
+import { isAnarchyGroupNumber } from "../src/mines/types.js";
 
 const API_URL = "https://funtime.example/api/backend/api/v1/plugin/mines";
 
@@ -86,3 +87,15 @@ describe("fetchMines", () => {
     await expect(fetchMines({ apiUrl: API_URL, fetchImpl: fakeFetch({ servers: {} }) })).resolves.toEqual([]);
   });
 });
+
+describe("isAnarchyGroupNumber", () => {
+  it("accepts only three-digit FunTime groups", () => {
+    for (const value of ["101", "225", "306", "501", "902"]) {
+      expect(isAnarchyGroupNumber(value)).toBe(true);
+    }
+    for (const value of ["21", "2", "1021", "401", "600"]) {
+      expect(isAnarchyGroupNumber(value)).toBe(false);
+    }
+  });
+});
+

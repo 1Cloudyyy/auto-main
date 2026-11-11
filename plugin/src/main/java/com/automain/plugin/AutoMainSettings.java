@@ -43,6 +43,18 @@ public final class AutoMainSettings implements SettingsObject {
       .defaultValue(false)
       .build();
 
+  public static final IntProperty<SettingsSource.Instance> PICKAXE_SLOT =
+    ImmutableIntProperty.<SettingsSource.Instance>builder()
+      .sourceType(SettingsSource.Instance.INSTANCE)
+      .namespace(NAMESPACE)
+      .key("pickaxe-slot")
+      .uiName("Pickaxe hotbar slot")
+      .description("Hotbar slot (1-9) where the bot keeps its pickaxe")
+      .defaultValue(1)
+      .minValue(1)
+      .maxValue(9)
+      .build();
+
   public static final StringProperty<SettingsSource.Instance> MINES_API_URL =
     ImmutableStringProperty.<SettingsSource.Instance>builder()
       .sourceType(SettingsSource.Instance.INSTANCE)
@@ -171,3 +183,4 @@ public final class AutoMainSettings implements SettingsObject {
       .addAllDefaultValue(List.of())
       .build();
 }
+

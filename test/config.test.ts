@@ -39,6 +39,12 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ env: {}, cwd })).toThrow(ConfigError);
   });
 
+  it("parses the pickaxe slot", () => {
+    expect(loadConfig({ env: { SF_TOKEN: "t" }, cwd }).miner.pickaxeSlot).toBe(1);
+    expect(loadConfig({ env: { SF_TOKEN: "t", MINER_PICKAXE_SLOT: "4" }, cwd }).miner.pickaxeSlot).toBe(4);
+    expect(() => loadConfig({ env: { SF_TOKEN: "t", MINER_PICKAXE_SLOT: "12" }, cwd })).toThrow(ConfigError);
+  });
+
   it("parses test mode", () => {
     expect(loadConfig({ env: { SF_TOKEN: "t" }, cwd }).runtime.testMode).toBe(false);
     expect(loadConfig({ env: { SF_TOKEN: "t", TEST_MODE: "true" }, cwd }).runtime.testMode).toBe(true);
@@ -61,3 +67,4 @@ describe("loadConfig", () => {
     );
   });
 });
+

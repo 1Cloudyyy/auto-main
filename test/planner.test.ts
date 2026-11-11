@@ -68,7 +68,7 @@ describe("planTargets", () => {
     expect(targets.map((target) => target.y)).toEqual([85, 84]);
   });
 
-  it("prefers diamonds over gold", () => {
+  it("prefers the nearer cluster", () => {
     const ores = [gold(0, 85, 0), diamond(20, 85, 20)];
 
     const targets = planTargets(ores, { x: 0, y: 86, z: 0 }, weights, {
@@ -76,7 +76,7 @@ describe("planTargets", () => {
       maxTargets: 10,
     });
 
-    expect(targets[0]?.x).toBe(20);
+    expect(targets[0]?.x).toBe(0);
   });
 
   it("respects maxTargets", () => {
@@ -126,3 +126,4 @@ describe("helpers", () => {
     expect(distance({ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 0 })).toBe(5);
   });
 });
+
