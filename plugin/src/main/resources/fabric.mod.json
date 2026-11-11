@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "auto-main",
+  "version": "${version}",
+  "name": "Auto-Main Config",
+  "description": "${description}",
+  "authors": [
+    "1Cloudyyy"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      "com.automain.plugin.Main"
+    ]
+  },
+  "depends": {
+    "fabricloader": "*",
+    "minecraft": "*",
+    "soulfire": "*"
+  }
+}

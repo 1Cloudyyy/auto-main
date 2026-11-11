@@ -13,6 +13,11 @@ import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
+import {
+  resolveConfigWithSoulFire,
+  readSettingsNamespace,
+  SETTINGS_NAMESPACE,
+} from "./soulfire/settings.js";
 import { DEFAULT_ORE_IDS, runRecorder } from "./soulfire/recorder.js";
 import { formatDuration } from "./util/time.js";
 
@@ -22,9 +27,12 @@ const HELP = `auto-main — FunTime auto-mine farm controller
 
 Usage:
   auto-main doctor                 check SoulFire connection, instance and bots
-  auto-main mines [--watch] [--json] [--limit N]
+  auto-main mines [--watch] [--json] [--limit N] [--offline]
                                    poll the mines API and print the chosen target
   auto-main record [options]       attach to a bot, run commands, dump ore snapshot
+
+Settings come from the SoulFire plugin page (instance namespace "auto-main").
+Pass --offline to skip SoulFire and use env/config only.
 
 record options:
   --commands "/an205,/warp mine"   comma-separated commands (default: /warp mine)
@@ -59,7 +67,7 @@ function main(): void {
       void runMines(config, log, flags);
       return;
     case "record":
-      runRecord(config, log, flags);
+      void runRecord(config, log, flags);
       return;
     default:
       log.error({ command }, "unknown command");
@@ -88,6 +96,14 @@ function runDoctor(config: AppConfig, log: Logger): void {
       );
 
       const instance = yield* resolveInstance(client, config.soulfire.instance);
+      const info = yield* instance.info();
+      log.info(
+        {
+          namespace: SETTINGS_NAMESPACE,
+          settings: readSettingsNamespace(info, SETTINGS_NAMESPACE),
+        },
+        "plugin settings",
+      );
       const { entry } = yield* resolveBot(instance, config.soulfire.bot);
       const bots = yield* instance.bots();
 
@@ -115,7 +131,9 @@ function runDoctor(config: AppConfig, log: Logger): void {
   NodeRuntime.runMain(program);
 }
 
-async function runMines(config: AppConfig, log: Logger, flags: Flags): Promise<void> {
+async function runMines(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
+  const config =
+    flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
   const asJson = flags["json"] === true;
   const watch = flags["watch"] === true;
   const limit = numberFlag(flags, "limit", 25);
@@ -220,7 +238,9 @@ function printMines(
   );
 }
 
-function runRecord(config: AppConfig, log: Logger, flags: Flags): void {
+async function runRecord(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
+  const config =
+    flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
   const commands = stringFlag(flags, "commands", "/warp mine")
     .split(",")
     .map((part) => part.trim())
