@@ -8,9 +8,10 @@ import { createLogger } from "./log.js";
 import type { Logger } from "./log.js";
 import { fetchMines } from "./mines/client.js";
 import { createDispatcherState, planNextTarget, rankCandidates, selectCandidates } from "./mines/dispatcher.js";
-import type { DispatcherState, TargetPlan } from "./mines/dispatcher.js";
+import type { DispatcherState, TargetPlan, TargetPolicy } from "./mines/dispatcher.js";
 import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
+import { targetPolicy } from "./policy.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
 import { DEFAULT_ORE_IDS, runRecorder } from "./soulfire/recorder.js";
 import { formatDuration } from "./util/time.js";
@@ -119,6 +120,7 @@ async function runMines(config: AppConfig, log: Logger, flags: Flags): Promise<v
   const watch = flags["watch"] === true;
   const limit = numberFlag(flags, "limit", 25);
   const state = createDispatcherState();
+  const policy = targetPolicy(config);
 
   const pullOnce = async (): Promise<void> => {
     const entries = await fetchMines({
@@ -126,14 +128,14 @@ async function runMines(config: AppConfig, log: Logger, flags: Flags): Promise<v
       serverTypes: config.mines.serverTypes,
       timeoutMs: 10_000,
     });
-    const plan = planNextTarget(entries, config.targets, state);
+    const plan = planNextTarget(entries, policy, state);
 
     if (asJson) {
       process.stdout.write(`${JSON.stringify({ at: new Date().toISOString(), plan, entries })}\n`);
       return;
     }
 
-    printMines(entries, plan, limit, config, log);
+    printMines(entries, plan, limit, policy, log);
   };
 
   try {
@@ -166,11 +168,11 @@ function printMines(
   entries: readonly MineEntry[],
   plan: TargetPlan | undefined,
   limit: number,
-  config: AppConfig,
+  policy: TargetPolicy,
   log: Logger,
 ): void {
-  const candidates = selectCandidates(entries, config.targets);
-  const ranked = rankCandidates(candidates, config.targets).slice(0, limit);
+  const candidates = selectCandidates(entries, policy);
+  const ranked = rankCandidates(candidates, policy).slice(0, limit);
 
   log.info(
     {

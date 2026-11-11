@@ -21,8 +21,13 @@ export const AppConfigSchema = z.object({
     pollIntervalMs: z.number().int().positive().default(7000),
   }),
   base: z.object({
-    /** Command that teleports the bot to the clan base from any anarchy. */
+    /** Command that teleports the bot to the clan base. Only valid on `homeAnarchy`. */
     homeCommand: z.string().min(1).default("/clan home"),
+    /**
+     * The single anarchy where the clan home is registered (e.g. "302").
+     * It is excluded from farm targets and used as the transit hub to the base.
+     */
+    homeAnarchy: z.string().min(1).optional(),
   }),
   targets: z.object({
     strategy: z.enum(["timer", "round_robin"]).default("timer"),
@@ -95,6 +100,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       ...asRecord(fileConfig["base"]),
       ...dropUndefined({
         homeCommand: env["BASE_HOME_COMMAND"],
+        homeAnarchy: env["BASE_HOME_ANARCHY"],
       }),
     },
     targets: {
