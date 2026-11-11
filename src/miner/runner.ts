@@ -28,6 +28,8 @@ export interface MinerConfig {
   readonly anarchyWaitMs: number;
   /** Wait after the warp, ms. */
   readonly warpWaitMs: number;
+  /** How long to keep rescanning while no ore is visible (chunk load / wrong spot). */
+  readonly scanTimeoutMs: number;
   readonly oreIds: readonly string[];
   readonly weights: Readonly<Record<string, number>>;
   /** Mine cuboid; anything outside is ignored. */
@@ -68,6 +70,7 @@ export const DEFAULT_MINER_CONFIG: Omit<MinerConfig, "warp"> = {
   goToTimeoutMs: 8_000,
   anarchyWaitMs: 20_000,
   warpWaitMs: 12_000,
+  scanTimeoutMs: 30_000,
   oreIds: DEFAULT_ORE_IDS,
   weights: DEFAULT_WEIGHTS,
   minX: 69,
@@ -125,10 +128,13 @@ export async function runMiner(
 
   let digs = 0;
   let scanned = 0;
+  let emptySince: number | undefined;
   let oreBlocks = 0;
   let stopped: MinerResult["stopped"] = "budget";
 
-  const deadline = started + config.maxSeconds * 1000;
+  // The mining budget starts after the transitions, not after the lease wait.
+  const miningStarted = Date.now();
+  const deadline = miningStarted + config.maxSeconds * 1000;
 
   while (Date.now() < deadline && digs < config.maxDigs) {
     const state = await runEffect(bot.liveState());
@@ -149,11 +155,30 @@ export async function runMiner(
     });
 
     scanned = ores.length;
+    log.debug(
+      {
+        at: [Math.round(state.x), Math.round(state.y), Math.round(state.z)],
+        ores: ores.length,
+      },
+      "scan",
+    );
     if (ores.length === 0) {
-      stopped = "empty";
-      log.info("no ore left in range");
-      break;
+      emptySince ??= Date.now();
+      if (Date.now() - emptySince > config.scanTimeoutMs) {
+        stopped = "empty";
+        log.warn(
+          {
+            at: [Math.round(state.x), Math.round(state.y), Math.round(state.z)],
+            waitedMs: Date.now() - emptySince,
+          },
+          "no ore in range; check the warp and the mine cuboid",
+        );
+        break;
+      }
+      await sleep(2_000);
+      continue;
     }
+    emptySince = undefined;
 
     const targets = planTargets(ores, state, config.weights, {
       window: 3,
@@ -223,7 +248,11 @@ export async function runMiner(
     clearInterval(renewTimer);
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    await runEffect(lease.release()).catch(() => undefined);
+    try {
+      await runEffect(lease.release());
+    } catch (error) {
+      log.warn({ err: errorMessage(error) }, "control lease release failed");
+    }
   }
 }
 
@@ -320,7 +349,7 @@ async function acquireLease(bot: SoulFireBot, log: Logger, timeoutMs = 90_000) {
       lastError = error;
       log.warn(
         { err: errorMessage(error) },
-        "control lease is busy (another client holds it), retrying in 5s",
+        "control lease is busy - close the SoulFire desktop/web client (or its POV view) and keep it closed; retrying in 5s",
       );
       await sleep(5_000);
     }
@@ -338,6 +367,10 @@ const sleep = (ms: number): Promise<void> =>
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
+
+
+
 
 
 
