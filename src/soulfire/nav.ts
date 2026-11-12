@@ -94,6 +94,14 @@ export async function warpToMine(
     await runEffect(bot.waitForChunks());
 
     if (await waitForMinePosition(bot, verifyTimeoutMs, bounds)) {
+      const state = await runEffect(bot.liveState());
+      log.debug(
+        {
+          at: [Math.round(state.x), Math.round(state.y), Math.round(state.z)],
+          dimension: state.dimension ?? null,
+        },
+        "warp verified",
+      );
       return true;
     }
 
@@ -170,6 +178,7 @@ export async function acquireLease(
   );
   return undefined;
 }
+
 
 
 
