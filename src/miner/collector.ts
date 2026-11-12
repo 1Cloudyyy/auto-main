@@ -17,6 +17,8 @@ export interface CollectorConfig {
 
 export interface CollectorResult {
   readonly status: string;
+  readonly reason: number;
+  readonly blocksBroken: number;
   readonly elapsedMs: number;
 }
 
@@ -52,19 +54,22 @@ export async function runCollector(
 
   log.debug({ snapshot }, "collect task snapshot");
 
-  let detail: { reason?: number; blocksBroken?: number } = {};
+  let reason = 0;
+  let blocksBroken = 0;
   if (String(snapshot.status) === "6") {
     try {
       const result = await Effect.runPromise(task.result());
-      detail = { reason: result.reason, blocksBroken: result.blocksBroken };
+      reason = result.reason;
+      blocksBroken = result.blocksBroken;
     } catch {
       // The task completed but the result is unavailable; keep the status only.
     }
   }
 
-  log.info({ status: String(snapshot.status), ...detail, elapsedMs }, "collect task finished");
+  log.info({ status: String(snapshot.status), reason, blocksBroken, elapsedMs }, "collect task finished");
 
-  return { status: String(snapshot.status), elapsedMs };
+  return { status: String(snapshot.status), reason, blocksBroken, elapsedMs };
 }
+
 
 

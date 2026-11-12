@@ -170,3 +170,15 @@ we only provide anarchy, warp and the block filter.
 
 Also fixed: warp position verification (the warp point is 61,86,2, outside the mine cuboid, so the old
 check always failed and re-sent the warp).
+
+## 2026-11-12 — rotation loop
+
+`auto-main farm` added: dispatcher target -> `/anN` -> warp (3 attempts, verified by position **and**
+dimension `minecraft:lobby`) -> SF `collectBlocks` task -> next mine. Failed or empty mines are
+blacklisted for the session; stop on SIGINT or after N empty mines.
+
+Shared navigation moved to `src/soulfire/nav.ts` (`isAtMine`, `waitForMinePosition`, `warpToMine`,
+`ensureOnline`, `acquireLease`). Mine cuboid and warp point constants live in `src/miner/bounds.ts`.
+
+Live verification was interrupted: the VDS stopped answering SSH (banner timeout) while ports 22/443
+still accept TCP. Code compiles, 50 tests pass; farm must be re-tested once the host is back.
