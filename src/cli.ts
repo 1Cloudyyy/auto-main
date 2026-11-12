@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Effect } from "effect";
 import { NodeRuntime } from "@effect/platform-node";
-import type { SoulFireInstance } from "@soulfiremc/sdk";
+import type { SoulFireBot, SoulFireInstance } from "@soulfiremc/sdk";
 import { loadConfig, loadDotEnv } from "./config.js";
 import type { AppConfig } from "./config.js";
 import { createLogger } from "./log.js";
@@ -13,8 +13,10 @@ import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
-import { DEFAULT_MINER_CONFIG, runMiner } from "./miner/runner.js";
+import { DEFAULT_MINER_CONFIG, normalizeAnarchy, runMiner } from "./miner/runner.js";
 import type { MinerConfig } from "./miner/runner.js";
+import { runCollector } from "./miner/collector.js";
+import type { CollectorConfig } from "./miner/collector.js";
 import {
   applyPluginSettings,
   resolveConfigWithSoulFire,
@@ -34,6 +36,17 @@ Usage:
                                    poll the mines API and print the chosen target
   auto-main record [options]       attach to a bot, run commands, dump ore snapshot
   auto-main mine [options]         switch anarchy, warp and mine until a budget is hit
+  auto-main collect [options]      same, but uses the built-in SoulFire collectBlocks task
+
+collect options:
+  --anarchy 226                    anarchy number or full command
+  --warp mine                      warp command
+  --max 60                         stop after this many blocks
+  --radius 24                      search radius (max 64)
+  --seconds 120                    task deadline
+  --path-timeout 25                per-path deadline, seconds
+  --ore minecraft:diamond_ore,...  block ids to collect
+  --start                          start the bot if it is offline
 
 mine options:
   --anarchy 205                    anarchy number or full command
@@ -91,6 +104,9 @@ function main(): void {
       return;
     case "mine":
       void runMine(config, log, flags);
+      return;
+    case "collect":
+      void runCollect(config, log, flags);
       return;
     default:
       log.error({ command }, "unknown command");
@@ -380,6 +396,107 @@ async function runMine(baseConfig: AppConfig, log: Logger, flags: Flags): Promis
   NodeRuntime.runMain(program);
 }
 
+async function runCollect(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
+  const config =
+    flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
+  const anarchy = typeof flags["anarchy"] === "string" ? flags["anarchy"] : undefined;
+  const warp = stringFlag(flags, "warp", "mine");
+  const oreIds =
+    flags["ore"] === undefined
+      ? DEFAULT_ORE_IDS
+      : stringFlag(flags, "ore", "")
+          .split(",")
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0);
+
+  const collector: CollectorConfig = {
+    oreIds,
+    radius: numberFlag(flags, "radius", 24),
+    maxCount: numberFlag(flags, "max", 60),
+    deadlineMs: numberFlag(flags, "seconds", 120) * 1000,
+    pathTimeoutSeconds: numberFlag(flags, "path-timeout", 25),
+  };
+
+  const program = Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* connectClient(config);
+      const instance = yield* resolveInstance(client, config.soulfire.instance);
+      const { bot, entry } = yield* resolveBot(instance, config.soulfire.bot);
+      const label = entry.accountName ?? entry.profileId;
+
+      if (!entry.isOnline) {
+        if (flags["start"] !== true) {
+          return yield* Effect.fail(
+            new Error(`Bot "${label}" is offline. Attach to a running bot or pass --start.`),
+          );
+        }
+        log.info({ bot: label }, "bot is offline, starting");
+        yield* bot.start();
+        yield* waitOnline(instance, entry.profileId, 120_000);
+      }
+
+      const lease = yield* bot.acquireControl(120);
+      try {
+        if (anarchy !== undefined && anarchy.trim() !== "") {
+          const command = normalizeAnarchy(anarchy);
+          log.info({ command }, "switching anarchy");
+          yield* bot.sendChat(command);
+          yield* sleep(numberFlag(flags, "anarchy-wait-ms", 20_000));
+        }
+
+        const warpCommand = warp.startsWith("/") ? warp : `/warp ${warp}`;
+        log.info({ command: warpCommand }, "warping to the mine");
+        yield* bot.sendChat(warpCommand);
+        yield* sleep(numberFlag(flags, "warp-wait-ms", 12_000));
+        yield* bot.waitForChunks();
+
+        if (!(yield* waitForMinePosition(bot, 15_000))) {
+          log.warn("not at the mine after the first warp, retrying");
+          yield* bot.sendChat(warpCommand);
+          yield* sleep(numberFlag(flags, "warp-wait-ms", 12_000));
+          yield* waitForMinePosition(bot, 15_000);
+        }
+      } finally {
+        yield* Effect.promise(() =>
+          Effect.runPromise(lease.release()).then(
+            () => undefined,
+            () => undefined,
+          ),
+        );
+      }
+
+      log.info({ bot: label, ...collector }, "collect started");
+      const result = yield* Effect.promise(() => runCollector(bot, collector, log));
+      log.info({ bot: label, ...result }, "collect done");
+    }),
+  );
+
+  NodeRuntime.runMain(program);
+}
+
+const waitForMinePosition = (bot: SoulFireBot, timeoutMs: number) =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs;
+    const bounds = DEFAULT_MINER_CONFIG;
+
+    while (Date.now() < deadline) {
+      const state = yield* bot.liveState();
+      const inside =
+        state.x >= (bounds.minX ?? 0) - 2 &&
+        state.x <= (bounds.maxX ?? 0) + 2 &&
+        state.z >= (bounds.minZ ?? 0) - 2 &&
+        state.z <= (bounds.maxZ ?? 0) + 2;
+      const atWarp = Math.abs(state.x - 61) <= 6 && Math.abs(state.z - 2) <= 6 && state.y >= 80;
+
+      if (inside || atWarp) {
+        return true;
+      }
+      yield* sleep(1_000);
+    }
+
+    return false;
+  });
+
 const waitOnline = (instance: SoulFireInstance, profileId: string, timeoutMs: number) =>
   Effect.gen(function* () {
     const deadline = Date.now() + timeoutMs;
@@ -454,4 +571,7 @@ function errorMessage(error: unknown): string {
 }
 
 main();
+
+
+
 

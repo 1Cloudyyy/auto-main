@@ -35,6 +35,9 @@ export interface MinerConfig {
   readonly warpWaitMs: number;
   /** How long to walk toward the mine after the warp. */
   readonly enterTimeoutMs: number;
+  /** Side-step from the warp point before walking into the mine (avoids the shaft). */
+  readonly entryShiftX: number;
+  readonly entryShiftZ: number;
   /** How long to keep rescanning while no ore is visible (chunk load / wrong spot). */
   readonly scanTimeoutMs: number;
   readonly oreIds: readonly string[];
@@ -80,6 +83,8 @@ export const DEFAULT_MINER_CONFIG: Omit<MinerConfig, "warp"> = {
   anarchyWaitMs: 20_000,
   warpWaitMs: 12_000,
   enterTimeoutMs: 10_000,
+  entryShiftX: 0,
+  entryShiftZ: 2,
   scanTimeoutMs: 30_000,
   oreIds: DEFAULT_ORE_IDS,
   weights: DEFAULT_WEIGHTS,
@@ -135,6 +140,8 @@ export async function runMiner(
   await runEffect(bot.sendChat(warp));
   await sleep(config.warpWaitMs);
   await runEffect(bot.waitForChunks());
+
+  await approachMine(bot, config, log);
 
   const entered = await enterMine(bot, config, log);
   if (!entered) {
@@ -419,6 +426,74 @@ export function normalizeAnarchy(value: string): string {
 
 const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 
+/**
+ * Deterministic walk-in: side-step along +Z (away from the entry shaft), then
+ * walk along +X toward the mine. Each segment uses an absolute yaw and aborts
+ * when the bot stops making progress, so it cannot oscillate.
+ */
+async function approachMine(bot: SoulFireBot, config: MinerConfig, log: Logger): Promise<void> {
+  const start = await runEffect(bot.liveState());
+  log.debug(
+    { at: [Math.round(start.x), Math.round(start.y), Math.round(start.z)] },
+    "warp point",
+  );
+
+  if (config.entryShiftZ !== 0) {
+    await stepAxis(bot, "z", start.z + config.entryShiftZ, 4_000);
+  }
+
+  const centerX = ((config.minX ?? 69) + (config.maxX ?? 89)) / 2;
+  const now = await runEffect(bot.liveState());
+  const direction = centerX >= now.x ? 1 : -1;
+  await stepAxis(bot, "x", now.x + direction * 4, 4_000);
+
+  const after = await runEffect(bot.liveState());
+  log.debug(
+    { at: [Math.round(after.x), Math.round(after.y), Math.round(after.z)] },
+    "approached the mine",
+  );
+}
+
+/** Walks along one axis using an absolute yaw, stopping on no progress. */
+async function stepAxis(
+  bot: SoulFireBot,
+  axis: "x" | "z",
+  target: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last: { x: number; z: number } | undefined;
+  let stuck = 0;
+
+  try {
+    while (Date.now() < deadline) {
+      const state = await runEffect(bot.liveState());
+      const value = axis === "x" ? state.x : state.z;
+      if ((axis === "x" && Math.abs(state.x - target) < 0.8) || (axis === "z" && Math.abs(state.z - target) < 0.8)) {
+        break;
+      }
+
+      if (last !== undefined && Math.abs(state.x - last.x) < 0.05 && Math.abs(state.z - last.z) < 0.05) {
+        stuck += 1;
+        if (stuck >= 3) {
+          break;
+        }
+      } else {
+        stuck = 0;
+      }
+      last = { x: state.x, z: state.z };
+
+      const delta = target - value;
+      const yaw = axis === "x" ? (delta > 0 ? -90 : 90) : (delta > 0 ? 0 : 180);
+      await runEffect(bot.look(yaw, 0));
+      await runEffect(bot.setMovement({ forward: true }));
+      await sleep(200);
+    }
+  } finally {
+    await runEffect(bot.setMovement({ forward: false })).catch(() => undefined);
+  }
+}
+
 /** Raw movement fallback: walk (and hop) toward the target until in reach. */
 async function walkToward(
   bot: SoulFireBot,
@@ -546,9 +621,23 @@ async function enterMine(bot: SoulFireBot, config: MinerConfig, log: Logger): Pr
     .sort((a, b) => distance(state0, a) - distance(state0, b))[0];
 
   const deadline = Date.now() + config.enterTimeoutMs;
+  let lastPos: { x: number; z: number } | undefined;
+  let stuck = 0;
 
   while (Date.now() < deadline) {
     const state = await runEffect(bot.liveState());
+
+    if (lastPos !== undefined && Math.abs(state.x - lastPos.x) < 0.05 && Math.abs(state.z - lastPos.z) < 0.05) {
+      stuck += 1;
+      if (stuck >= 4) {
+        await runEffect(bot.setMovement({ forward: false }));
+        log.debug("stopped walking into the mine: no progress");
+        return false;
+      }
+    } else {
+      stuck = 0;
+    }
+    lastPos = { x: state.x, z: state.z };
     const inside = state.x >= minX && state.x <= maxX && state.z >= minZ && state.z <= maxZ;
     const onTopLayer = state.y >= (config.maxY ?? 85) - 1;
 
@@ -616,6 +705,10 @@ const sleep = (ms: number): Promise<void> =>
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
+
+
+
 
 
 

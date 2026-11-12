@@ -155,3 +155,18 @@ Verified working: connect/lease → `/anN` → `/warp mine` → enter mine → `
 Known unsolved: in an already-dug mine the bot often ends up in a 1-block hole at the bottom and cannot
 climb or cross the 3x3 gaps; digs then time out. Next iteration: tunnel-toward-target (break the block
 in front of the desired direction instead of pathfinding), and test only on a freshly reset mine.
+
+## 2026-11-12 � task-based collector (works)
+
+`auto-main collect` uses SoulFire's built-in `CollectBlocksTask` instead of our hand-rolled
+navigation. Live run on anarchy 226:
+
+```
+status=COMPLETED reason=NO_REACHABLE_BLOCKS blocksBroken=42 elapsed=116s
+```
+
+That is the first stable engine: the server-side task handles pathfinding, line of sight and digging,
+we only provide anarchy, warp and the block filter.
+
+Also fixed: warp position verification (the warp point is 61,86,2, outside the mine cuboid, so the old
+check always failed and re-sent the warp).
