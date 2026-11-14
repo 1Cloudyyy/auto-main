@@ -102,8 +102,8 @@ public final class AutoMainSettings implements SettingsObject {
       .sourceType(SettingsSource.Instance.INSTANCE)
       .namespace(NAMESPACE)
       .key("home-anarchy")
-      .uiName("Main anarchy")
-      .description("Anarchy where the clan home is registered; never farmed")
+      .uiName("Main anarchy (clan home)")
+      .description("Three-digit anarchy number where the clan home is registered (e.g. 302). Never farmed by the controller")
       .defaultValue("302")
       .build();
 
@@ -183,4 +183,5 @@ public final class AutoMainSettings implements SettingsObject {
       .addAllDefaultValue(List.of())
       .build();
 }
+
 

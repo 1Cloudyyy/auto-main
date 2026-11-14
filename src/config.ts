@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { isAnarchyGroupNumber } from "./mines/types.js";
 
 export const DEFAULT_MINES_API_URL = "https://funtime.me/api/backend/api/v1/plugin/mines";
 export const DEFAULT_SOULFIRE_URL = "https://217.60.33.212";
@@ -149,6 +150,13 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   }
 
   const config = parsed.data;
+  const homeAnarchy = config.base.homeAnarchy;
+  if (homeAnarchy !== undefined && /^\d+$/.test(homeAnarchy) && !isAnarchyGroupNumber(homeAnarchy)) {
+    throw new ConfigError(
+      `Invalid BASE_HOME_ANARCHY "${homeAnarchy}": use a three-digit group number (1xx, 2xx, 3xx, 5xx, 9xx)`,
+    );
+  }
+
   if (config.targets.maxLeadMs < config.targets.minLeadMs) {
     throw new ConfigError("Invalid configuration: TARGET_MAX_LEAD_MS must be >= TARGET_MIN_LEAD_MS");
   }
@@ -226,4 +234,5 @@ function toBoolean(raw: string | undefined): boolean | undefined {
   }
   throw new ConfigError(`Expected a boolean, got "${raw}"`);
 }
+
 

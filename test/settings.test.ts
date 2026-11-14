@@ -126,6 +126,11 @@ describe("applyPluginSettings", () => {
     expect(() => applyPluginSettings(base, { "pickaxe-slot": 0 })).toThrow(ConfigError);
   });
 
+  it("validates home-anarchy from the plugin", () => {
+    expect(applyPluginSettings(base, { "home-anarchy": "503" }).base.homeAnarchy).toBe("503");
+    expect(() => applyPluginSettings(base, { "home-anarchy": "21" })).toThrow(ConfigError);
+  });
+
   it("applies test mode from the plugin", () => {
     expect(applyPluginSettings(base, { "test-mode": true }).runtime.testMode).toBe(true);
     expect(applyPluginSettings(base, { "test-mode": false }).runtime.testMode).toBe(false);
@@ -157,4 +162,5 @@ describe("applyPluginSettings", () => {
     expect(() => applyPluginSettings(base, { "mines-api-url": "not a url" })).toThrow(ConfigError);
   });
 });
+
 

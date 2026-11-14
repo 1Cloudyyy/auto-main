@@ -182,3 +182,12 @@ Shared navigation moved to `src/soulfire/nav.ts` (`isAtMine`, `waitForMinePositi
 
 Live verification was interrupted: the VDS stopped answering SSH (banner timeout) while ports 22/443
 still accept TCP. Code compiles, 50 tests pass; farm must be re-tested once the host is back.
+
+## 2026-11-14 — main anarchy setting
+
+- Plugin: `home-anarchy` renamed in UI to **"Main anarchy (clan home)"** with a description that it must be a
+  three-digit group number and is never farmed.
+- Controller: validates `home-anarchy` (plugin) and `BASE_HOME_ANARCHY` (env) — `21` is rejected,
+  `503` accepted. 52 tests.
+- Reminder: the plugin only exposes settings; the farm runs in the controller process (`auto-main farm`).
+  Starting the bot inside SoulFire does not start any automation until the controller is deployed as a service.

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { InstanceInfo } from "@soulfiremc/sdk";
 import { z } from "zod";
+import { isAnarchyGroupNumber } from "../mines/types.js";
 import { AppConfigSchema, ConfigError } from "../config.js";
 import type { AppConfig } from "../config.js";
 import type { Logger } from "../log.js";
@@ -113,6 +114,16 @@ export function applyPluginSettings(baseConfig: AppConfig, values: Record<string
 
   const overrides = parsed.data;
   const homeAnarchy = overrides["home-anarchy"]?.trim();
+  if (
+    homeAnarchy !== undefined &&
+    homeAnarchy !== "" &&
+    /^\d+$/.test(homeAnarchy) &&
+    !isAnarchyGroupNumber(homeAnarchy)
+  ) {
+    throw new ConfigError(
+      `Invalid plugin setting "home-anarchy" (${homeAnarchy}): use a three-digit group number (1xx, 2xx, 3xx, 5xx, 9xx)`,
+    );
+  }
 
   const merged: AppConfig = {
     soulfire: baseConfig.soulfire,
@@ -199,4 +210,5 @@ export async function resolveConfigWithSoulFire(
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
 

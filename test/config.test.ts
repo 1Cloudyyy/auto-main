@@ -45,6 +45,11 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ env: { SF_TOKEN: "t", MINER_PICKAXE_SLOT: "12" }, cwd })).toThrow(ConfigError);
   });
 
+  it("validates the main anarchy number", () => {
+    expect(loadConfig({ env: { SF_TOKEN: "t", BASE_HOME_ANARCHY: "503" }, cwd }).base.homeAnarchy).toBe("503");
+    expect(() => loadConfig({ env: { SF_TOKEN: "t", BASE_HOME_ANARCHY: "21" }, cwd })).toThrow(ConfigError);
+  });
+
   it("parses test mode", () => {
     expect(loadConfig({ env: { SF_TOKEN: "t" }, cwd }).runtime.testMode).toBe(false);
     expect(loadConfig({ env: { SF_TOKEN: "t", TEST_MODE: "true" }, cwd }).runtime.testMode).toBe(true);
@@ -67,4 +72,5 @@ describe("loadConfig", () => {
     );
   });
 });
+
 
