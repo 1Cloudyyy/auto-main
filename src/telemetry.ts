@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export interface RunRecord {
@@ -75,4 +75,44 @@ export function summarize(records: readonly RunRecord[]): RunSummary {
   }
 
   return { runs: records.length, blocksBroken, totalMs, perAnarchy };
+}
+
+export type ControllerPhase = "idle" | "target" | "switching" | "warping" | "collecting" | "error";
+
+export interface ControllerState {
+  readonly updatedAt: string;
+  readonly bot: string;
+  readonly phase: ControllerPhase;
+  readonly anarchy?: string;
+  readonly command?: string;
+  readonly blocksBroken?: number;
+  readonly error?: string;
+}
+
+/** Small JSON file with the live phase, so the operator can see where the bot is. */
+export class StateFile {
+  readonly filePath: string;
+
+  constructor(filePath: string, cwd: string = process.cwd()) {
+    this.filePath = resolve(cwd, filePath);
+    mkdirSync(dirname(this.filePath), { recursive: true });
+  }
+
+  write(state: Omit<ControllerState, "updatedAt">): void {
+    const payload: ControllerState = { updatedAt: new Date().toISOString(), ...state };
+    const temporary = `${this.filePath}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    renameSync(temporary, this.filePath);
+  }
+
+  read(): ControllerState | undefined {
+    if (!existsSync(this.filePath)) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(readFileSync(this.filePath, "utf8")) as ControllerState;
+    } catch {
+      return undefined;
+    }
+  }
 }

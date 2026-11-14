@@ -25,8 +25,18 @@ export function anarchyCommand(serverKey: string): string | null {
   return number === null ? null : `/an${number}`;
 }
 
+/** Java anarchies use three-digit keys (`anarchy311`). */
+export function isJavaServerKey(serverKey: string): boolean {
+  return /^anarchy\d{3}$/.test(serverKey);
+}
+
+/** Bedrock anarchies use two-digit keys (`anarchy21`). */
+export function isBedrockServerKey(serverKey: string): boolean {
+  return /^anarchy\d{2}$/.test(serverKey);
+}
+
 /**
- * FunTime numbers anarchies in three-digit groups only:
+ * FunTime numbers Java anarchies in three-digit groups:
  * 1xx solo, 2xx duo, 3xx trio, 5xx five players, 9xx up to ten.
  */
 export function isAnarchyGroupNumber(value: string): boolean {
@@ -38,5 +48,6 @@ export function serverNumber(serverKey: string): string | null {
   const match = /^anarchy(\d+)$/i.exec(serverKey);
   return match?.[1] ?? null;
 }
+
 
 

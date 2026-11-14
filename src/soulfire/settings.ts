@@ -16,6 +16,7 @@ const OverridesSchema = z.object({
   "mines-api-url": z.url().optional(),
   "mines-server-types": z.string().min(1).optional(),
   "mines-poll-interval-ms": z.number().int().positive().optional(),
+  "mines-include-bedrock": z.boolean().optional(),
   "home-command": z.string().min(1).optional(),
   "home-anarchy": z.string().optional(),
   "target-strategy": z.enum(["timer", "round_robin"]).optional(),
@@ -131,6 +132,7 @@ export function applyPluginSettings(baseConfig: AppConfig, values: Record<string
       apiUrl: overrides["mines-api-url"] ?? baseConfig.mines.apiUrl,
       serverTypes: overrides["mines-server-types"] ?? baseConfig.mines.serverTypes,
       pollIntervalMs: overrides["mines-poll-interval-ms"] ?? baseConfig.mines.pollIntervalMs,
+      includeBedrock: overrides["mines-include-bedrock"] ?? baseConfig.mines.includeBedrock,
     },
     base: {
       homeCommand: overrides["home-command"] ?? baseConfig.base.homeCommand,
@@ -210,5 +212,6 @@ export async function resolveConfigWithSoulFire(
 function errorMessage(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
 
 

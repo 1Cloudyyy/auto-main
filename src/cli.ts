@@ -12,7 +12,7 @@ import type { DispatcherState, TargetPlan, TargetPolicy } from "./mines/dispatch
 import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
-import { RunLog } from "./telemetry.js";
+import { RunLog, StateFile } from "./telemetry.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
 import { DEFAULT_MINER_CONFIG, normalizeAnarchy, runMiner } from "./miner/runner.js";
 import type { MinerConfig } from "./miner/runner.js";
@@ -43,6 +43,7 @@ Usage:
   auto-main farm [options]         rotation: dispatcher -> anarchy -> warp -> collect -> next
   auto-main daemon [options]       same as farm, but runs forever and restarts on errors
   auto-main stats [--file ...]     totals from the run journal (var/runs.jsonl)
+  auto-main status                 live state: current anarchy, phase, last runs
 
 farm options:
   --iterations 3                   number of mines (0 = until stopped)
@@ -131,6 +132,9 @@ function main(): void {
     case "stats":
       runStats(config, flags);
       return;
+    case "status":
+      runStatus(config);
+      return;
     default:
       log.error({ command }, "unknown command");
       process.stdout.write(HELP);
@@ -211,6 +215,7 @@ async function runMines(baseConfig: AppConfig, log: Logger, flags: Flags): Promi
     const entries = await fetchMines({
       apiUrl: config.mines.apiUrl,
       serverTypes: config.mines.serverTypes,
+      includeBedrock: flags["all-servers"] === true,
       timeoutMs: 10_000,
     });
     const plan = planNextTarget(entries, policy, state);
@@ -423,7 +428,7 @@ async function runFarmCommand(baseConfig: AppConfig, log: Logger, flags: Flags):
   const config =
     flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
   const runLog = new RunLog(config.runtime.runsFile);
-  const options = buildFarmOptions(config, flags, (run) => {
+  const baseOptions = buildFarmOptions(config, flags, (run) => {
     runLog.append({ ts: new Date().toISOString(), ...run });
   });
 
@@ -433,6 +438,11 @@ async function runFarmCommand(baseConfig: AppConfig, log: Logger, flags: Flags):
       const instance = yield* resolveInstance(client, config.soulfire.instance);
       const { bot, entry } = yield* resolveBot(instance, config.soulfire.bot);
       const label = entry.accountName ?? entry.profileId;
+      const stateFile = new StateFile(config.runtime.stateFile);
+      const options: FarmOptions = {
+        ...baseOptions,
+        onPhase: (phase) => stateFile.write({ bot: label, ...phase }),
+      };
 
       let stopping = false;
       const stop = (): void => {
@@ -501,6 +511,7 @@ function buildFarmOptions(
     },
     minesApiUrl: config.mines.apiUrl,
     serverTypes: config.mines.serverTypes,
+    includeBedrock: config.mines.includeBedrock,
     warp: stringFlag(flags, "warp", "mine"),
     anarchyWaitMs: numberFlag(flags, "anarchy-wait-ms", 28_000),
     warpWaitMs: numberFlag(flags, "warp-wait-ms", 12_000),
@@ -509,6 +520,32 @@ function buildFarmOptions(
     maxEmptyRuns: numberFlag(flags, "empty-runs", 2),
     ...(onRun === undefined ? {} : { onRun }),
   };
+}
+
+function runStatus(config: AppConfig): void {
+  const state = new StateFile(config.runtime.stateFile).read();
+  const summary = new RunLog(config.runtime.runsFile).summary();
+
+  if (state === undefined) {
+    process.stdout.write("no state yet (daemon/farm has not run)\\n");
+  } else {
+    const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(state.updatedAt)) / 1000));
+    const lines = [
+      `bot:      ${state.bot}`,
+      `phase:    ${state.phase}`,
+      `anarchy:  ${state.anarchy ?? "-"}${state.command === undefined ? "" : ` (${state.command})`}`,
+      `updated:  ${state.updatedAt} (${ageSeconds}s ago)`,
+    ];
+    if (state.blocksBroken !== undefined) {
+      lines.push(`last:     ${state.blocksBroken} blocks`);
+    }
+    if (state.error !== undefined) {
+      lines.push(`error:    ${state.error}`);
+    }
+    process.stdout.write(`${lines.join("\n")}\\n`);
+  }
+
+  process.stdout.write(`runs: ${summary.runs}, blocks: ${summary.blocksBroken}\\n`);
 }
 
 function runStats(config: AppConfig, flags: Flags): void {
@@ -547,7 +584,7 @@ async function runDaemon(baseConfig: AppConfig, log: Logger, flags: Flags): Prom
   const config =
     flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
   const runLog = new RunLog(config.runtime.runsFile);
-  const options = buildFarmOptions(config, flags, (run) => {
+  const baseOptions = buildFarmOptions(config, flags, (run) => {
     runLog.append({ ts: new Date().toISOString(), ...run });
   });
 
@@ -557,6 +594,12 @@ async function runDaemon(baseConfig: AppConfig, log: Logger, flags: Flags): Prom
       const instance = yield* resolveInstance(client, config.soulfire.instance);
       const { bot, entry } = yield* resolveBot(instance, config.soulfire.bot);
       const label = entry.accountName ?? entry.profileId;
+      const stateFile = new StateFile(config.runtime.stateFile);
+      const options: FarmOptions = {
+        ...baseOptions,
+        iterations: 1,
+        onPhase: (phase) => stateFile.write({ bot: label, ...phase }),
+      };
 
       let stopping = false;
       const stop = (): void => {
@@ -572,7 +615,7 @@ async function runDaemon(baseConfig: AppConfig, log: Logger, flags: Flags): Prom
         while (!stopping) {
           try {
             const runs = yield* Effect.promise(() =>
-              runFarm(bot, instance, entry.profileId, { ...options, iterations: 1 }, log, () => stopping),
+              runFarm(bot, instance, entry.profileId, options, log, () => stopping),
             );
             if (runs.length === 0) {
               yield* sleep(60_000);
@@ -769,6 +812,10 @@ function errorMessage(error: unknown): string {
 }
 
 main();
+
+
+
+
 
 
 

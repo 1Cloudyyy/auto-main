@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fetchMines, MinesApiError } from "../src/mines/client.js";
-import { isAnarchyGroupNumber } from "../src/mines/types.js";
+import { isAnarchyGroupNumber, isBedrockServerKey, isJavaServerKey } from "../src/mines/types.js";
 
 const API_URL = "https://funtime.example/api/backend/api/v1/plugin/mines";
 
@@ -99,3 +99,33 @@ describe("isAnarchyGroupNumber", () => {
   });
 });
 
+
+describe("Java vs Bedrock servers", () => {
+  const mixed = {
+    servers: {
+      anarchy112: [{ "server-ru-name": "Анархия-112", "mine-rarity": "default" }],
+      anarchy21: [{ "server-ru-name": "Анархия-21", "mine-rarity": "default" }],
+    },
+  };
+
+  it("detects the server family by key length", () => {
+    expect(isJavaServerKey("anarchy112")).toBe(true);
+    expect(isJavaServerKey("anarchy21")).toBe(false);
+    expect(isBedrockServerKey("anarchy21")).toBe(true);
+    expect(isBedrockServerKey("anarchy112")).toBe(false);
+  });
+
+  it("excludes Bedrock servers by default", async () => {
+    const entries = await fetchMines({ apiUrl: API_URL, fetchImpl: fakeFetch(mixed) });
+    expect(entries.map((entry) => entry.serverKey)).toEqual(["anarchy112"]);
+  });
+
+  it("includes Bedrock servers when asked", async () => {
+    const entries = await fetchMines({
+      apiUrl: API_URL,
+      includeBedrock: true,
+      fetchImpl: fakeFetch(mixed),
+    });
+    expect(entries.map((entry) => entry.serverKey)).toEqual(["anarchy21", "anarchy112"]);
+  });
+});

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { MineEntry } from "./types.js";
+import { isJavaServerKey } from "./types.js";
 
 const WireMineSchema = z.object({
   "server-ru-name": z.string().default(""),
@@ -30,6 +31,8 @@ export interface MinesClientOptions {
   apiUrl: string;
   serverTypes?: string;
   timeoutMs?: number;
+  /** Include Bedrock (two-digit) anarchies. Java-only by default. */
+  includeBedrock?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -38,7 +41,13 @@ export interface MinesClientOptions {
  * The endpoint is documented in `КОНСПЕКТ.md` §3.
  */
 export async function fetchMines(options: MinesClientOptions): Promise<MineEntry[]> {
-  const { apiUrl, serverTypes = "all", timeoutMs = 10_000, fetchImpl = fetch } = options;
+  const {
+    apiUrl,
+    serverTypes = "all",
+    timeoutMs = 10_000,
+    includeBedrock = false,
+    fetchImpl = fetch,
+  } = options;
 
   const url = new URL(apiUrl);
   url.searchParams.set("server-types", serverTypes);
@@ -80,7 +89,9 @@ export async function fetchMines(options: MinesClientOptions): Promise<MineEntry
     }
   }
 
-  return entries.sort((a, b) =>
+  const filtered = includeBedrock ? entries : entries.filter((entry) => isJavaServerKey(entry.serverKey));
+
+  return filtered.sort((a, b) =>
     a.serverKey.localeCompare(b.serverKey, "en", { numeric: true }),
   );
 }
@@ -105,3 +116,4 @@ function describe(error: unknown): string {
   }
   return String(error);
 }
+

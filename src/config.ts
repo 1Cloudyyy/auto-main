@@ -20,6 +20,8 @@ export const AppConfigSchema = z.object({
     apiUrl: z.url().default(DEFAULT_MINES_API_URL),
     serverTypes: z.string().min(1).default("all"),
     pollIntervalMs: z.number().int().positive().default(7000),
+    /** Include Bedrock (two-digit) anarchies in the target pool. */
+    includeBedrock: z.boolean().default(false),
   }),
   base: z.object({
     /** Command that teleports the bot to the clan base. Only valid on `homeAnarchy`. */
@@ -50,6 +52,8 @@ export const AppConfigSchema = z.object({
     logFile: z.string().min(1).default("var/controller.log"),
     /** JSONL journal of farm runs. */
     runsFile: z.string().min(1).default("var/runs.jsonl"),
+    /** Live controller state (current anarchy/phase). */
+    stateFile: z.string().min(1).default("var/state.json"),
     /**
      * Skips base trips (drop, repair) and stops a run when inventory and
      * shulkers are full. Used to validate the mining loop in isolation.
@@ -108,6 +112,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
         apiUrl: env["MINES_API_URL"],
         serverTypes: env["MINES_SERVER_TYPES"],
         pollIntervalMs: toNumber(env["MINES_POLL_INTERVAL_MS"]),
+        includeBedrock: toBoolean(env["MINES_INCLUDE_BEDROCK"]),
       }),
     },
     base: {
@@ -142,6 +147,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
         logLevel: env["LOG_LEVEL"],
         logFile: env["LOG_FILE"],
         runsFile: env["RUNS_FILE"],
+        stateFile: env["STATE_FILE"],
         testMode: toBoolean(env["TEST_MODE"]),
       }),
     },
@@ -240,6 +246,8 @@ function toBoolean(raw: string | undefined): boolean | undefined {
   }
   throw new ConfigError(`Expected a boolean, got "${raw}"`);
 }
+
+
 
 
 

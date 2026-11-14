@@ -75,6 +75,16 @@ public final class AutoMainSettings implements SettingsObject {
       .defaultValue("all")
       .build();
 
+  public static final BooleanProperty<SettingsSource.Instance> MINES_INCLUDE_BEDROCK =
+    ImmutableBooleanProperty.<SettingsSource.Instance>builder()
+      .sourceType(SettingsSource.Instance.INSTANCE)
+      .namespace(NAMESPACE)
+      .key("mines-include-bedrock")
+      .uiName("Include Bedrock anarchies")
+      .description("Two-digit Bedrock servers (anarchy21). Off by default: the bot plays Java")
+      .defaultValue(false)
+      .build();
+
   public static final IntProperty<SettingsSource.Instance> MINES_POLL_INTERVAL_MS =
     ImmutableIntProperty.<SettingsSource.Instance>builder()
       .sourceType(SettingsSource.Instance.INSTANCE)
@@ -183,5 +193,6 @@ public final class AutoMainSettings implements SettingsObject {
       .addAllDefaultValue(List.of())
       .build();
 }
+
 
 

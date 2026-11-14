@@ -8,12 +8,14 @@ import { anarchyCommand } from "../mines/types.js";
 import { runCollector } from "../miner/collector.js";
 import type { CollectorConfig } from "../miner/collector.js";
 import { acquireLease, ensureOnline, warpToMine } from "../soulfire/nav.js";
+import type { ControllerPhase } from "../telemetry.js";
 
 export interface FarmOptions {
   readonly policy: TargetPolicy;
   readonly collect: CollectorConfig;
   readonly minesApiUrl: string;
   readonly serverTypes: string;
+  readonly includeBedrock: boolean;
   readonly warp: string;
   readonly anarchyWaitMs: number;
   readonly warpWaitMs: number;
@@ -24,6 +26,14 @@ export interface FarmOptions {
   readonly maxEmptyRuns: number;
   /** Called after every finished mine (used for the JSONL journal). */
   readonly onRun?: (run: FarmRun) => void;
+  /** Called on every phase change (used for the live state file). */
+  readonly onPhase?: (phase: {
+    phase: ControllerPhase;
+    anarchy?: string;
+    command?: string;
+    blocksBroken?: number;
+    error?: string;
+  }) => void;
 }
 
 export interface FarmRun {
@@ -67,6 +77,7 @@ export async function runFarm(
     const entries = await fetchMines({
       apiUrl: options.minesApiUrl,
       serverTypes: options.serverTypes,
+      includeBedrock: options.includeBedrock,
       timeoutMs: 10_000,
     });
 
@@ -88,6 +99,8 @@ export async function runFarm(
       failed.add(plan.entry.serverKey);
       continue;
     }
+
+    options.onPhase?.({ phase: "target", anarchy: plan.entry.serverKey, command });
 
     log.info(
       {
@@ -112,9 +125,11 @@ export async function runFarm(
 
     let warped = false;
     try {
+      options.onPhase?.({ phase: "switching", anarchy: plan.entry.serverKey, command });
       log.info({ command }, "switching anarchy");
       await runEffect(bot.sendChat(command));
       await sleep(options.anarchyWaitMs);
+      options.onPhase?.({ phase: "warping", anarchy: plan.entry.serverKey, command });
       warped = await warpToMine(bot, { warp: options.warp, warpWaitMs: options.warpWaitMs }, log);
     } catch (error) {
       log.warn({ err: message(error) }, "transition failed");
@@ -130,6 +145,7 @@ export async function runFarm(
 
     const started = Date.now();
     try {
+      options.onPhase?.({ phase: "collecting", anarchy: plan.entry.serverKey, command });
       const result = await runCollector(bot, options.collect, log);
       const run: FarmRun = {
         anarchy: plan.entry.serverKey,
@@ -140,6 +156,12 @@ export async function runFarm(
       };
       runs.push(run);
       options.onRun?.(run);
+      options.onPhase?.({
+        phase: "idle",
+        anarchy: plan.entry.serverKey,
+        command,
+        blocksBroken: result.blocksBroken,
+      });
 
       if (result.blocksBroken === 0) {
         emptyStreak += 1;
@@ -162,6 +184,7 @@ export async function runFarm(
       };
       runs.push(failedRun);
       options.onRun?.(failedRun);
+      options.onPhase?.({ phase: "error", anarchy: plan.entry.serverKey, command, error: failedRun.error });
       failed.add(plan.entry.serverKey);
       log.warn({ err: message(error) }, "collect task failed");
     }
@@ -177,5 +200,7 @@ const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runP
 function message(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
+
 
 
