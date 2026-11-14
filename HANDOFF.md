@@ -207,3 +207,18 @@ collect --anarchy 226 ...   ***СЂРµРєРѕРјРµРЅРґСѓРµРјС‹Р№***: SF CollectBlocksTa
 2. Если снова `reason=2` (`NO_MATCHING_BLOCKS`) при валидном варпе — смотреть `warp verified`
    в debug-логе (позиция/измерение) и `--radius` (24 может не доставать до руды от точки варпа).
 3. Дальше: шалкеры, отгрузка (`/an302` > `/clan home`), починка, supervisor.
+
+---
+
+## 11. Деплой демона и телеметрия (2026-11-14)
+
+- Контроллер развёрнут на VDS: `/opt/automain` (архив репозитория + `.env`, образ `automain-controller`).
+  `docker compose up -d --build`, команда контейнера — `node dist/src/cli.js daemon`, `restart: unless-stopped`.
+- **Логи:** `/opt/automain/var/controller.log` (JSON) и `docker compose logs -f controller`.
+- **Журнал прогонов:** `/opt/automain/var/runs.jsonl` (по строке на шахту: anarchy, status, blocksBroken, elapsedMs).
+  Сводка: `docker compose exec controller node dist/src/cli.js stats`.
+- **Грабли деплоя:** bind-mount `./var` создаётся root-ом, контейнер работает под `node` (uid 1000) >
+  `EACCES: var/controller.log`. Лечится: `mkdir -p var && chown -R 1000:1000 var`.
+- **Демон запущен, но lease занят** открытым клиентом SoulFire (`already_exists: Bot control is already leased`).
+  Пока клиент открыт, автофарм не начнётся — это ожидаемое поведение, не баг.
+- Команды: `daemon` (бесконечный цикл, рестарт при ошибках, SIGINT/SIGTERM), `stats`, `farm`, `collect`.
