@@ -222,3 +222,24 @@ collect --anarchy 226 ...   ***СЂРµРєРѕРјРµРЅРґСѓРµРјС‹Р№***: SF CollectBlocksTa
 - **Демон запущен, но lease занят** открытым клиентом SoulFire (`already_exists: Bot control is already leased`).
   Пока клиент открыт, автофарм не начнётся — это ожидаемое поведение, не баг.
 - Команды: `daemon` (бесконечный цикл, рестарт при ошибках, SIGINT/SIGTERM), `stats`, `farm`, `collect`.
+
+---
+
+## 12. Bedrock-сервера, статус и почему панель «замораживает» бота (2026-11-14)
+
+- **Bedrock vs Java:** в API шахт Java-анархии — трёхзначные ключи (`anarchy311`), Bedrock — двухзначные
+  (`anarchy11`, `anarchy21`, `anarchy22`). Сейчас 81 Java + 3 Bedrock.
+  Контроллер по умолчанию берёт **только Java** (`isJavaServerKey`). Включить Bedrock можно
+  галочкой `mines-include-bedrock` в плагине, env `MINES_INCLUDE_BEDROCK`, либо флагом `--all-servers`
+  у `mines`.
+- **Идентификатор текущей анархии:** `farm`/`daemon` пишут `var/state.json`
+  (`phase`, `anarchy`, `command`, `updatedAt`, последние блоки/ошибку). Посмотреть:
+  `docker compose exec controller node dist/src/cli.js status` (или тот же файл на хосте
+  `/opt/automain/var/state.json`).
+- **Почему просмотр через панель SoulFire останавливает автофарм:** POV-просмотр и ввод требуют
+  эксклюзивного control lease. Клиент забирает lease, серверные действия контроллера начинают
+  отклоняться (`already_exists`), и бот «замирает». Это не баг плагина: так устроен контроль SF.
+  Смотреть за ботом без перехвата управления можно через `status`, `var/controller.log`,
+  `var/runs.jsonl` и `docker compose logs -f controller`.
+- Команды: `status`, `stats`, `farm`, `daemon`. Теги: **v0.7.0** (демон+телеметрия), **v0.7.1**
+  (Java-only + state/status).
