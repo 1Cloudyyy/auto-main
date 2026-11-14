@@ -527,7 +527,7 @@ function runStatus(config: AppConfig): void {
   const summary = new RunLog(config.runtime.runsFile).summary();
 
   if (state === undefined) {
-    process.stdout.write("no state yet (daemon/farm has not run)\\n");
+    process.stdout.write("no state yet (daemon/farm has not run)\n");
   } else {
     const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(state.updatedAt)) / 1000));
     const lines = [
@@ -542,10 +542,10 @@ function runStatus(config: AppConfig): void {
     if (state.error !== undefined) {
       lines.push(`error:    ${state.error}`);
     }
-    process.stdout.write(`${lines.join("\n")}\\n`);
+    process.stdout.write(`${lines.join("\n")}\n`);
   }
 
-  process.stdout.write(`runs: ${summary.runs}, blocks: ${summary.blocksBroken}\\n`);
+  process.stdout.write(`runs: ${summary.runs}, blocks: ${summary.blocksBroken}\n`);
 }
 
 function runStats(config: AppConfig, flags: Flags): void {
@@ -812,6 +812,7 @@ function errorMessage(error: unknown): string {
 }
 
 main();
+
 
 
 
