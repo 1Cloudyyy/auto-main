@@ -6,4 +6,5 @@ services:
       - .env
     volumes:
       - ./var:/app/var
-    command: ["node", "dist/src/cli.js", "help"]
+    command: ["node", "dist/src/cli.js", "daemon"]
+

@@ -22,6 +22,8 @@ export interface FarmOptions {
   readonly idleMs: number;
   /** Stop after this many consecutive empty mines. */
   readonly maxEmptyRuns: number;
+  /** Called after every finished mine (used for the JSONL journal). */
+  readonly onRun?: (run: FarmRun) => void;
 }
 
 export interface FarmRun {
@@ -129,13 +131,15 @@ export async function runFarm(
     const started = Date.now();
     try {
       const result = await runCollector(bot, options.collect, log);
-      runs.push({
+      const run: FarmRun = {
         anarchy: plan.entry.serverKey,
         command,
         status: result.status,
         blocksBroken: result.blocksBroken,
         elapsedMs: result.elapsedMs,
-      });
+      };
+      runs.push(run);
+      options.onRun?.(run);
 
       if (result.blocksBroken === 0) {
         emptyStreak += 1;
@@ -148,14 +152,16 @@ export async function runFarm(
         emptyStreak = 0;
       }
     } catch (error) {
-      runs.push({
+      const failedRun: FarmRun = {
         anarchy: plan.entry.serverKey,
         command,
         status: "ERROR",
         blocksBroken: 0,
         elapsedMs: Date.now() - started,
         error: message(error),
-      });
+      };
+      runs.push(failedRun);
+      options.onRun?.(failedRun);
       failed.add(plan.entry.serverKey);
       log.warn({ err: message(error) }, "collect task failed");
     }
@@ -171,4 +177,5 @@ const runEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runP
 function message(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
+
 

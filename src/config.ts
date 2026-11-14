@@ -46,6 +46,10 @@ export const AppConfigSchema = z.object({
   runtime: z.object({
     dataDir: z.string().min(1).default("var"),
     logLevel: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+    /** JSON log file (also written to stdout). */
+    logFile: z.string().min(1).default("var/controller.log"),
+    /** JSONL journal of farm runs. */
+    runsFile: z.string().min(1).default("var/runs.jsonl"),
     /**
      * Skips base trips (drop, repair) and stops a run when inventory and
      * shulkers are full. Used to validate the mining loop in isolation.
@@ -136,6 +140,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       ...dropUndefined({
         dataDir: env["DATA_DIR"],
         logLevel: env["LOG_LEVEL"],
+        logFile: env["LOG_FILE"],
+        runsFile: env["RUNS_FILE"],
         testMode: toBoolean(env["TEST_MODE"]),
       }),
     },
@@ -234,5 +240,6 @@ function toBoolean(raw: string | undefined): boolean | undefined {
   }
   throw new ConfigError(`Expected a boolean, got "${raw}"`);
 }
+
 
 

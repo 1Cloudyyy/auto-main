@@ -12,13 +12,14 @@ import type { DispatcherState, TargetPlan, TargetPolicy } from "./mines/dispatch
 import { anarchyCommand } from "./mines/types.js";
 import type { MineEntry } from "./mines/types.js";
 import { targetPolicy } from "./policy.js";
+import { RunLog } from "./telemetry.js";
 import { connectClient, resolveBot, resolveInstance } from "./soulfire/connect.js";
 import { DEFAULT_MINER_CONFIG, normalizeAnarchy, runMiner } from "./miner/runner.js";
 import type { MinerConfig } from "./miner/runner.js";
 import { runCollector } from "./miner/collector.js";
 import type { CollectorConfig } from "./miner/collector.js";
 import { runFarm } from "./farm/loop.js";
-import type { FarmOptions } from "./farm/loop.js";
+import type { FarmOptions, FarmRun } from "./farm/loop.js";
 import {
   applyPluginSettings,
   resolveConfigWithSoulFire,
@@ -40,6 +41,8 @@ Usage:
   auto-main mine [options]         switch anarchy, warp and mine until a budget is hit
   auto-main collect [options]      same, but uses the built-in SoulFire collectBlocks task
   auto-main farm [options]         rotation: dispatcher -> anarchy -> warp -> collect -> next
+  auto-main daemon [options]       same as farm, but runs forever and restarts on errors
+  auto-main stats [--file ...]     totals from the run journal (var/runs.jsonl)
 
 farm options:
   --iterations 3                   number of mines (0 = until stopped)
@@ -93,7 +96,7 @@ Environment: see .env.example. Config precedence: env > config/app.yaml > defaul
 function main(): void {
   loadDotEnv();
   const config = loadConfig();
-  const log = createLogger({ level: config.runtime.logLevel });
+  const log = createLogger({ level: config.runtime.logLevel, file: config.runtime.logFile });
 
   const [command, ...rest] = process.argv.slice(2);
   const flags = parseFlags(rest);
@@ -121,6 +124,12 @@ function main(): void {
       return;
     case "farm":
       void runFarmCommand(config, log, flags);
+      return;
+    case "daemon":
+      void runDaemon(config, log, flags);
+      return;
+    case "stats":
+      runStats(config, flags);
       return;
     default:
       log.error({ command }, "unknown command");
@@ -413,32 +422,10 @@ async function runMine(baseConfig: AppConfig, log: Logger, flags: Flags): Promis
 async function runFarmCommand(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
   const config =
     flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
-  const oreIds =
-    flags["ore"] === undefined
-      ? DEFAULT_ORE_IDS
-      : stringFlag(flags, "ore", "")
-          .split(",")
-          .map((part) => part.trim())
-          .filter((part) => part.length > 0);
-
-  const options: FarmOptions = {
-    policy: targetPolicy(config),
-    collect: {
-      oreIds,
-      radius: numberFlag(flags, "radius", 24),
-      maxCount: numberFlag(flags, "max", 60),
-      deadlineMs: numberFlag(flags, "seconds", 120) * 1000,
-      pathTimeoutSeconds: numberFlag(flags, "path-timeout", 25),
-    },
-    minesApiUrl: config.mines.apiUrl,
-    serverTypes: config.mines.serverTypes,
-    warp: stringFlag(flags, "warp", "mine"),
-    anarchyWaitMs: numberFlag(flags, "anarchy-wait-ms", 28_000),
-    warpWaitMs: numberFlag(flags, "warp-wait-ms", 12_000),
-    iterations: numberFlag(flags, "iterations", 3),
-    idleMs: numberFlag(flags, "idle-ms", 5_000),
-    maxEmptyRuns: numberFlag(flags, "empty-runs", 2),
-  };
+  const runLog = new RunLog(config.runtime.runsFile);
+  const options = buildFarmOptions(config, flags, (run) => {
+    runLog.append({ ts: new Date().toISOString(), ...run });
+  });
 
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -488,6 +475,123 @@ function formatFarmTable(
   const line = (cells: readonly string[]): string =>
     cells.map((cell, index) => cell.padEnd(widths[index] ?? cell.length)).join("  ");
   return [line(header), ...rows.map(line)].join("\n");
+}
+
+function buildFarmOptions(
+  config: AppConfig,
+  flags: Flags,
+  onRun?: (run: FarmRun) => void,
+): FarmOptions {
+  const oreIds =
+    flags["ore"] === undefined
+      ? DEFAULT_ORE_IDS
+      : stringFlag(flags, "ore", "")
+          .split(",")
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0);
+
+  return {
+    policy: targetPolicy(config),
+    collect: {
+      oreIds,
+      radius: numberFlag(flags, "radius", 24),
+      maxCount: numberFlag(flags, "max", 60),
+      deadlineMs: numberFlag(flags, "seconds", 120) * 1000,
+      pathTimeoutSeconds: numberFlag(flags, "path-timeout", 25),
+    },
+    minesApiUrl: config.mines.apiUrl,
+    serverTypes: config.mines.serverTypes,
+    warp: stringFlag(flags, "warp", "mine"),
+    anarchyWaitMs: numberFlag(flags, "anarchy-wait-ms", 28_000),
+    warpWaitMs: numberFlag(flags, "warp-wait-ms", 12_000),
+    iterations: numberFlag(flags, "iterations", 3),
+    idleMs: numberFlag(flags, "idle-ms", 5_000),
+    maxEmptyRuns: numberFlag(flags, "empty-runs", 2),
+    ...(onRun === undefined ? {} : { onRun }),
+  };
+}
+
+function runStats(config: AppConfig, flags: Flags): void {
+  const file = stringFlag(flags, "file", config.runtime.runsFile);
+  const runLog = new RunLog(file);
+  const records = runLog.readAll();
+
+  if (records.length === 0) {
+    process.stdout.write(`no runs in ${runLog.filePath}\n`);
+    return;
+  }
+
+  const summary = runLog.summary();
+  const rows = Object.entries(summary.perAnarchy)
+    .sort((a, b) => b[1].blocksBroken - a[1].blocksBroken)
+    .map(([anarchy, bucket]) => [anarchy, String(bucket.runs), String(bucket.blocksBroken)]);
+
+  const header = ["anarchy", "runs", "blocks"];
+  const widths = header.map((title, index) =>
+    Math.max(title.length, ...rows.map((row) => (row[index] ?? "").length)),
+  );
+  const line = (cells: readonly string[]): string =>
+    cells.map((cell, index) => cell.padEnd(widths[index] ?? cell.length)).join("  ");
+
+  process.stdout.write(
+    [
+      line(header),
+      ...rows.map(line),
+      "",
+      `total: ${summary.runs} runs, ${summary.blocksBroken} blocks, ${Math.round(summary.totalMs / 60_000)} min`,
+    ].join("\n") + "\n",
+  );
+}
+
+async function runDaemon(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
+  const config =
+    flags["offline"] === true ? baseConfig : await resolveConfigWithSoulFire(baseConfig, log);
+  const runLog = new RunLog(config.runtime.runsFile);
+  const options = buildFarmOptions(config, flags, (run) => {
+    runLog.append({ ts: new Date().toISOString(), ...run });
+  });
+
+  const program = Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* connectClient(config);
+      const instance = yield* resolveInstance(client, config.soulfire.instance);
+      const { bot, entry } = yield* resolveBot(instance, config.soulfire.bot);
+      const label = entry.accountName ?? entry.profileId;
+
+      let stopping = false;
+      const stop = (): void => {
+        stopping = true;
+        log.info("stop requested, finishing the current mine");
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+
+      log.info({ bot: label, runsFile: runLog.filePath }, "daemon started");
+
+      try {
+        while (!stopping) {
+          try {
+            const runs = yield* Effect.promise(() =>
+              runFarm(bot, instance, entry.profileId, { ...options, iterations: 1 }, log, () => stopping),
+            );
+            if (runs.length === 0) {
+              yield* sleep(60_000);
+            }
+          } catch (error) {
+            log.error({ err: errorMessage(error) }, "farm cycle failed; restarting in 30s");
+            yield* sleep(30_000);
+          }
+        }
+      } finally {
+        process.off("SIGINT", stop);
+        process.off("SIGTERM", stop);
+      }
+
+      log.info("daemon stopped");
+    }),
+  );
+
+  NodeRuntime.runMain(program);
 }
 
 async function runCollect(baseConfig: AppConfig, log: Logger, flags: Flags): Promise<void> {
@@ -665,6 +769,9 @@ function errorMessage(error: unknown): string {
 }
 
 main();
+
+
+
 
 
 
